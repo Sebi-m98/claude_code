@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RegenRadar Deutschland</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- Time display overlay -->
+    <div id="time-display">
+        <span id="current-time">--:--</span>
+    </div>
+
+    <!-- Slider bar at bottom -->
+    <div id="slider-bar">
+        <div id="slider-container">
+            <span id="slider-label-start">00:00</span>
+            <input type="range" id="time-slider" min="0" max="95" step="1" value="0" />
+            <span id="slider-label-end">23:45</span>
+        </div>
+        <div id="slider-controls">
+            <button id="btn-back" title="15 Min zurück">&#9664;</button>
+            <button id="btn-now" title="Jetzt">Jetzt</button>
+            <button id="btn-forward" title="15 Min vor">&#9654;</button>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+        <div class="legend-title">mm/h</div>
+        <div class="legend-items">
+            <div class="legend-item"><span class="legend-color" style="background: #c8e8ff;"></span>0.1</div>
+            <div class="legend-item"><span class="legend-color" style="background: #a0d0ff;"></span>0.5</div>
+            <div class="legend-item"><span class="legend-color" style="background: #64b4ff;"></span>1</div>
+            <div class="legend-item"><span class="legend-color" style="background: #3296e6;"></span>2</div>
+            <div class="legend-item"><span class="legend-color" style="background: #0a82c8;"></span>5</div>
+            <div class="legend-item"><span class="legend-color" style="background: #0064a0;"></span>10</div>
+            <div class="legend-item"><span class="legend-color" style="background: #004678;"></span>20</div>
+            <div class="legend-item"><span class="legend-color" style="background: #6e28a0;"></span>50</div>
+        </div>
+    </div>
+
+    <!-- No data indicator -->
+    <div id="no-data" class="hidden">Keine Radardaten für diesen Zeitpunkt verfügbar</div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
