@@ -274,14 +274,21 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             var past = data.radar && data.radar.past ? data.radar.past : [];
             var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
 
-            console.log('RainViewer past frames:', past.length,
-                past.length ? '(' + unixToTime(past[0].time) + ' - ' + unixToTime(past[past.length-1].time) + ')' : '');
-            console.log('RainViewer nowcast frames:', nowcast.length,
-                nowcast.length ? '(' + unixToTime(nowcast[0].time) + ' - ' + unixToTime(nowcast[nowcast.length-1].time) + ')' : '(LEER - Free Tier?)');
+            // Mark frames so we know which type they are
+            past.forEach(function(f) { f.type = 'past'; });
+            nowcast.forEach(function(f) { f.type = 'nowcast'; });
 
             allFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
-            console.log('Total frames:', allFrames.length,
-                allFrames.length ? unixToTime(allFrames[0].time) + ' - ' + unixToTime(allFrames[allFrames.length-1].time) : '');
+
+            console.log('Past:', past.length, 'frames | Nowcast:', nowcast.length, 'frames | Total:', allFrames.length);
+            if (allFrames.length) {
+                console.log('Range:', unixToTime(allFrames[0].time), '-', unixToTime(allFrames[allFrames.length-1].time));
+            }
+            // Log full API response structure for debugging
+            console.log('API response keys:', Object.keys(data.radar || {}));
+            if (nowcast.length === 0) {
+                console.warn('No nowcast frames! API may not provide forecast data.');
+            }
 
             updateSliderRange();
         } catch (err) {
@@ -302,8 +309,11 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 
         noDataEl.classList.add('hidden');
         var tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
-        radarLayer = L.tileLayer(
-            rainviewerData.host + frame.path + '/' + tileSize + '/{z}/{x}/{y}/2/1_1.png',
+
+        // frame.path already contains the full path (works for both past and nowcast)
+        var tileUrl = rainviewerData.host + frame.path + '/' + tileSize + '/{z}/{x}/{y}/2/1_1.png';
+
+        radarLayer = L.tileLayer(tileUrl,
             { tileSize: 256, opacity: 0.7, zIndex: 100, maxNativeZoom: 7, maxZoom: 18, className: 'radar-tiles' }
         ).addTo(map);
     }
