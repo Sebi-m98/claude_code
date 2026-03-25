@@ -14,8 +14,8 @@
     // --- State ---
     let map;
     let radarLayer = null;
-    let rainviewerData = null; // { past: [], nowcast: [] }
-    let allTimestamps = []; // combined sorted unix timestamps from RainViewer
+    let rainviewerData = null;
+    let allFrames = []; // combined sorted frames { time, path } from RainViewer
 
     // --- DOM refs ---
     const slider = document.getElementById('time-slider');
@@ -59,10 +59,10 @@
             const data = await response.json();
             rainviewerData = data;
 
-            // Combine past and nowcast timestamps
-            const past = (data.radar?.past || []).map(f => f.time);
-            const nowcast = (data.radar?.nowcast || []).map(f => f.time);
-            allTimestamps = [...past, ...nowcast].sort((a, b) => a - b);
+            // Combine past and nowcast frames (keep path + time)
+            const past = data.radar?.past || [];
+            const nowcast = data.radar?.nowcast || [];
+            allFrames = [...past, ...nowcast].sort((a, b) => a.time - b.time);
 
             // Update display for current slider position
             updateRadarForSlider();
@@ -71,17 +71,17 @@
         }
     }
 
-    function findClosestTimestamp(targetUnix) {
-        if (allTimestamps.length === 0) return null;
+    function findClosestFrame(targetUnix) {
+        if (allFrames.length === 0) return null;
 
-        let closest = allTimestamps[0];
-        let minDiff = Math.abs(targetUnix - closest);
+        let closest = allFrames[0];
+        let minDiff = Math.abs(targetUnix - closest.time);
 
-        for (const ts of allTimestamps) {
-            const diff = Math.abs(targetUnix - ts);
+        for (const frame of allFrames) {
+            const diff = Math.abs(targetUnix - frame.time);
             if (diff < minDiff) {
                 minDiff = diff;
-                closest = ts;
+                closest = frame;
             }
         }
 
@@ -90,29 +90,28 @@
         return closest;
     }
 
-    function setRadarLayer(timestamp) {
+    function setRadarLayer(frame) {
         if (radarLayer) {
             map.removeLayer(radarLayer);
             radarLayer = null;
         }
 
-        if (!timestamp || !rainviewerData) {
+        if (!frame || !rainviewerData) {
             noDataEl.classList.remove('hidden');
             return;
         }
 
         noDataEl.classList.add('hidden');
 
-        const tileSize = 256;
-        const colorScheme = 2; // Universal Blue (similar to WetterOnline)
-        const smooth = 1;
-        const snow = 1;
+        const tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
 
         radarLayer = L.tileLayer(
-            `${rainviewerData.host}/v2/radar/${timestamp}/${tileSize}/{z}/{x}/{y}/${colorScheme}/${smooth}_${snow}.png`,
+            `${rainviewerData.host}${frame.path}/${tileSize}/{z}/{x}/{y}/2/1_1.png`,
             {
-                opacity: 0.7,
+                tileSize: 256,
+                opacity: 0.8,
                 zIndex: 100,
+                maxNativeZoom: 7,
                 maxZoom: 18,
             }
         ).addTo(map);
@@ -166,8 +165,8 @@
     function updateRadarForSlider() {
         const step = parseInt(slider.value, 10);
         const targetUnix = stepToUnixTimestamp(step);
-        const closest = findClosestTimestamp(targetUnix);
-        setRadarLayer(closest);
+        const closestFrame = findClosestFrame(targetUnix);
+        setRadarLayer(closestFrame);
     }
 
     // --- Controls ---
