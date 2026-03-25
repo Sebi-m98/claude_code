@@ -268,25 +268,68 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     }
 
     // --- DWD WMS Radar ---
+    // Try multiple approaches: with TIME param, without, different layers
+    var DWD_CONFIGS = [
+        { layer: 'dwd:RX-Produkt', useTime: true },
+        { layer: 'dwd:RX-Produkt', useTime: false },
+        { layer: 'dwd:WN-Produkt', useTime: true },
+        { layer: 'dwd:WN-Produkt', useTime: false },
+    ];
+    var activeConfig = 0;
+    var configLocked = false; // stop trying once one works
+
     function createRadarLayer() {
+        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+
+        var cfg = DWD_CONFIGS[activeConfig];
         var step = parseInt(slider.value, 10);
         var isoTime = stepToISOTime(step);
 
-        radarLayer = L.tileLayer.wms(DWD_WMS_URL, {
-            layers: DWD_LAYER,
+        var params = {
+            layers: cfg.layer,
             styles: '',
             format: 'image/png',
             transparent: true,
-            version: '1.1.1',
-            time: isoTime,
+            version: '1.3.0',
             opacity: 0.7,
             maxZoom: 18,
             className: 'radar-tiles',
             keepBuffer: 6
-        }).addTo(map);
+        };
+        if (cfg.useTime) {
+            params.time = isoTime;
+        }
+
+        console.log('DWD WMS: trying', cfg.layer, cfg.useTime ? 'TIME=' + isoTime : 'no TIME');
+
+        radarLayer = L.tileLayer.wms(DWD_WMS_URL, params).addTo(map);
+
+        var loaded = 0, errors = 0;
 
         radarLayer.on('tileload', function() {
+            loaded++;
             noDataEl.classList.add('hidden');
+            if (loaded === 1 && !configLocked) {
+                configLocked = true;
+                console.log('DWD WMS works:', cfg.layer, cfg.useTime ? 'with TIME' : 'without TIME');
+            }
+        });
+
+        radarLayer.on('tileerror', function(e) {
+            errors++;
+            console.warn('Tile error #' + errors, e.tile ? e.tile.src : '');
+            // If first config fails, try next
+            if (errors >= 3 && loaded === 0 && !configLocked) {
+                activeConfig++;
+                if (activeConfig < DWD_CONFIGS.length) {
+                    console.log('Config failed, trying next...');
+                    createRadarLayer();
+                } else {
+                    console.error('All DWD WMS configs failed');
+                    noDataEl.textContent = 'DWD-Server nicht erreichbar';
+                    noDataEl.classList.remove('hidden');
+                }
+            }
         });
     }
 
@@ -299,12 +342,14 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             return;
         }
 
-        // Just update the time param - much faster, reuses tile infrastructure
-        radarLayer.setParams({ time: isoTime });
+        var cfg = DWD_CONFIGS[activeConfig];
+        if (cfg.useTime) {
+            radarLayer.setParams({ time: isoTime });
+        }
+        // If no TIME support, layer always shows current data
     }
 
     function forceRefresh() {
-        // Full refresh: remove and recreate layer to bust cache
         if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
         createRadarLayer();
     }
