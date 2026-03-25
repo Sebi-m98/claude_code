@@ -222,10 +222,10 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     var STEP_MINUTES = 10;
     var REFRESH_INTERVAL = 2 * 60 * 1000;
     var NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
-    var DWD_WMS_URL = 'https://maps.dwd.de/geoserver/dwd/wms';
-    var DWD_LAYER = 'dwd:RX-Produkt';
+    var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 
     var map, radarLayer = null;
+    var rainviewerData = null, allFrames = [];
     var searchTimeout = null;
 
     var slider = document.getElementById('time-slider');
@@ -245,7 +245,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         initSlider();
         initControls();
         initSearch();
-        createRadarLayer();
+        forceRefresh();
         updateLastRefreshTime();
         setInterval(function() {
             forceRefresh();
@@ -267,91 +267,64 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         }).addTo(map);
     }
 
-    // --- DWD WMS Radar ---
-    // Try multiple approaches: with TIME param, without, different layers
-    var DWD_CONFIGS = [
-        { layer: 'dwd:RX-Produkt', useTime: true },
-        { layer: 'dwd:RX-Produkt', useTime: false },
-        { layer: 'dwd:WN-Produkt', useTime: true },
-        { layer: 'dwd:WN-Produkt', useTime: false },
-    ];
-    var activeConfig = 0;
-    var configLocked = false; // stop trying once one works
-
-    function createRadarLayer() {
-        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
-
-        var cfg = DWD_CONFIGS[activeConfig];
-        var step = parseInt(slider.value, 10);
-        var isoTime = stepToISOTime(step);
-
-        var params = {
-            layers: cfg.layer,
-            styles: '',
-            format: 'image/png',
-            transparent: true,
-            version: '1.3.0',
-            opacity: 0.7,
-            maxZoom: 18,
-            className: 'radar-tiles',
-            keepBuffer: 6
-        };
-        if (cfg.useTime) {
-            params.time = isoTime;
+    // --- RainViewer Radar ---
+    async function loadRainViewerData() {
+        try {
+            var response = await fetch(RAINVIEWER_API, { cache: 'no-store' });
+            var data = await response.json();
+            rainviewerData = data;
+            var past = data.radar && data.radar.past ? data.radar.past : [];
+            var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
+            allFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
+        } catch (err) {
+            console.error('RainViewer error:', err);
         }
-
-        console.log('DWD WMS: trying', cfg.layer, cfg.useTime ? 'TIME=' + isoTime : 'no TIME');
-
-        radarLayer = L.tileLayer.wms(DWD_WMS_URL, params).addTo(map);
-
-        var loaded = 0, errors = 0;
-
-        radarLayer.on('tileload', function() {
-            loaded++;
-            noDataEl.classList.add('hidden');
-            if (loaded === 1 && !configLocked) {
-                configLocked = true;
-                console.log('DWD WMS works:', cfg.layer, cfg.useTime ? 'with TIME' : 'without TIME');
-            }
-        });
-
-        radarLayer.on('tileerror', function(e) {
-            errors++;
-            console.warn('Tile error #' + errors, e.tile ? e.tile.src : '');
-            // If first config fails, try next
-            if (errors >= 3 && loaded === 0 && !configLocked) {
-                activeConfig++;
-                if (activeConfig < DWD_CONFIGS.length) {
-                    console.log('Config failed, trying next...');
-                    createRadarLayer();
-                } else {
-                    console.error('All DWD WMS configs failed');
-                    noDataEl.textContent = 'DWD-Server nicht erreichbar';
-                    noDataEl.classList.remove('hidden');
-                }
-            }
-        });
     }
 
     function showRadar() {
-        var step = parseInt(slider.value, 10);
-        var isoTime = stepToISOTime(step);
-
-        if (!radarLayer) {
-            createRadarLayer();
+        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+        if (!rainviewerData || allFrames.length === 0) {
+            noDataEl.classList.remove('hidden');
             return;
         }
 
-        var cfg = DWD_CONFIGS[activeConfig];
-        if (cfg.useTime) {
-            radarLayer.setParams({ time: isoTime });
+        var step = parseInt(slider.value, 10);
+        var targetUnix = stepToUnixTimestamp(step);
+        var frame = findClosestFrame(targetUnix);
+
+        if (!frame) {
+            noDataEl.classList.remove('hidden');
+            return;
         }
-        // If no TIME support, layer always shows current data
+
+        noDataEl.classList.add('hidden');
+        var tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
+        radarLayer = L.tileLayer(
+            rainviewerData.host + frame.path + '/' + tileSize + '/{z}/{x}/{y}/2/1_1.png',
+            { tileSize: 256, opacity: 0.7, zIndex: 100, maxNativeZoom: 7, maxZoom: 18, className: 'radar-tiles' }
+        ).addTo(map);
     }
 
-    function forceRefresh() {
-        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
-        createRadarLayer();
+    function findClosestFrame(targetUnix) {
+        if (allFrames.length === 0) return null;
+        var closest = allFrames[0];
+        var minDiff = Math.abs(targetUnix - closest.time);
+        for (var i = 1; i < allFrames.length; i++) {
+            var diff = Math.abs(targetUnix - allFrames[i].time);
+            if (diff < minDiff) { minDiff = diff; closest = allFrames[i]; }
+        }
+        return minDiff <= 600 ? closest : null;
+    }
+
+    function stepToUnixTimestamp(step) {
+        var now = new Date();
+        var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return Math.floor(dayStart.getTime() / 1000) + step * STEP_MINUTES * 60;
+    }
+
+    async function forceRefresh() {
+        await loadRainViewerData();
+        showRadar();
     }
 
     // --- Slider ---
@@ -377,13 +350,6 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         var hours = Math.floor(totalMinutes / 60) % 24;
         var minutes = totalMinutes % 60;
         return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
-    }
-
-    function stepToISOTime(step) {
-        var now = new Date();
-        var d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        d.setMinutes(step * STEP_MINUTES);
-        return d.toISOString();
     }
 
     function updateTimeDisplay(step) {
@@ -413,9 +379,10 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         });
         btnRefresh.addEventListener('click', function () {
             btnRefresh.classList.add('spinning');
-            forceRefresh();
-            updateLastRefreshTime();
-            setTimeout(function() { btnRefresh.classList.remove('spinning'); }, 600);
+            forceRefresh().then(function() {
+                updateLastRefreshTime();
+                setTimeout(function() { btnRefresh.classList.remove('spinning'); }, 600);
+            });
         });
         btnLocate.addEventListener('click', function () {
             if (!navigator.geolocation) { alert('Geolocation nicht verfuegbar.'); return; }
