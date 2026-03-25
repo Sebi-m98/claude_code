@@ -218,8 +218,6 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 
     var GERMANY_CENTER = [51.2, 10.4];
     var DEFAULT_ZOOM = 7;
-    var STEPS_PER_DAY = 144;
-    var STEP_MINUTES = 10;
     var REFRESH_INTERVAL = 2 * 60 * 1000;
     var NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
     var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
@@ -276,6 +274,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             var past = data.radar && data.radar.past ? data.radar.past : [];
             var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
             allFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
+            updateSliderRange();
         } catch (err) {
             console.error('RainViewer error:', err);
         }
@@ -288,14 +287,9 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             return;
         }
 
-        var step = parseInt(slider.value, 10);
-        var targetUnix = stepToUnixTimestamp(step);
-        var frame = findClosestFrame(targetUnix);
-
-        if (!frame) {
-            noDataEl.classList.remove('hidden');
-            return;
-        }
+        var idx = parseInt(slider.value, 10);
+        var frame = allFrames[idx];
+        if (!frame) { noDataEl.classList.remove('hidden'); return; }
 
         noDataEl.classList.add('hidden');
         var tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
@@ -305,55 +299,53 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         ).addTo(map);
     }
 
-    function findClosestFrame(targetUnix) {
-        if (allFrames.length === 0) return null;
-        var closest = allFrames[0];
-        var minDiff = Math.abs(targetUnix - closest.time);
-        for (var i = 1; i < allFrames.length; i++) {
-            var diff = Math.abs(targetUnix - allFrames[i].time);
-            if (diff < minDiff) { minDiff = diff; closest = allFrames[i]; }
-        }
-        return minDiff <= 600 ? closest : null;
-    }
-
-    function stepToUnixTimestamp(step) {
-        var now = new Date();
-        var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        return Math.floor(dayStart.getTime() / 1000) + step * STEP_MINUTES * 60;
-    }
-
     async function forceRefresh() {
         await loadRainViewerData();
         showRadar();
     }
 
-    // --- Slider ---
+    // --- Slider (maps 1:1 to available frames) ---
+    function updateSliderRange() {
+        if (allFrames.length === 0) return;
+        slider.min = 0;
+        slider.max = allFrames.length - 1;
+
+        // Update start/end labels
+        document.getElementById('slider-label-start').textContent = unixToTime(allFrames[0].time);
+        document.getElementById('slider-label-end').textContent = unixToTime(allFrames[allFrames.length - 1].time);
+
+        // Set slider to frame closest to now
+        goToNow();
+    }
+
+    function goToNow() {
+        var nowUnix = Math.floor(Date.now() / 1000);
+        var bestIdx = 0, bestDiff = Infinity;
+        for (var i = 0; i < allFrames.length; i++) {
+            var diff = Math.abs(allFrames[i].time - nowUnix);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        }
+        slider.value = bestIdx;
+        updateTimeDisplay(bestIdx);
+    }
+
     function initSlider() {
-        var nowStep = getCurrentTimeStep();
-        slider.value = nowStep;
-        updateTimeDisplay(nowStep);
         slider.addEventListener('input', function () {
-            var step = parseInt(this.value, 10);
-            updateTimeDisplay(step);
+            var idx = parseInt(this.value, 10);
+            updateTimeDisplay(idx);
             showRadar();
         });
     }
 
-    function getCurrentTimeStep() {
-        var now = new Date();
-        var totalMinutes = now.getHours() * 60 + now.getMinutes();
-        return Math.min(Math.round(totalMinutes / STEP_MINUTES), STEPS_PER_DAY - 1);
+    function unixToTime(ts) {
+        var d = new Date(ts * 1000);
+        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     }
 
-    function stepToTime(step) {
-        var totalMinutes = step * STEP_MINUTES;
-        var hours = Math.floor(totalMinutes / 60) % 24;
-        var minutes = totalMinutes % 60;
-        return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
-    }
-
-    function updateTimeDisplay(step) {
-        timeDisplay.textContent = stepToTime(step);
+    function updateTimeDisplay(idx) {
+        if (allFrames[idx]) {
+            timeDisplay.textContent = unixToTime(allFrames[idx].time);
+        }
     }
 
     function updateLastRefreshTime() {
@@ -371,11 +363,10 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         });
         btnForward.addEventListener('click', function () {
             var c = parseInt(slider.value, 10);
-            if (c < STEPS_PER_DAY - 1) { slider.value = c + 1; updateTimeDisplay(c + 1); showRadar(); }
+            if (c < allFrames.length - 1) { slider.value = c + 1; updateTimeDisplay(c + 1); showRadar(); }
         });
         btnNow.addEventListener('click', function () {
-            var s = getCurrentTimeStep();
-            slider.value = s; updateTimeDisplay(s); showRadar();
+            goToNow(); showRadar();
         });
         btnRefresh.addEventListener('click', function () {
             btnRefresh.classList.add('spinning');
