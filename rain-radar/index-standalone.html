@@ -245,10 +245,10 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         initSlider();
         initControls();
         initSearch();
-        showRadar();
+        createRadarLayer();
         updateLastRefreshTime();
         setInterval(function() {
-            showRadar();
+            forceRefresh();
             updateLastRefreshTime();
         }, REFRESH_INTERVAL);
     }
@@ -268,11 +268,9 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     }
 
     // --- DWD WMS Radar ---
-    function showRadar() {
+    function createRadarLayer() {
         var step = parseInt(slider.value, 10);
         var isoTime = stepToISOTime(step);
-
-        if (radarLayer) { map.removeLayer(radarLayer); }
 
         radarLayer = L.tileLayer.wms(DWD_WMS_URL, {
             layers: DWD_LAYER,
@@ -284,18 +282,31 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             opacity: 0.7,
             maxZoom: 18,
             className: 'radar-tiles',
-            keepBuffer: 4
-        });
+            keepBuffer: 6
+        }).addTo(map);
 
         radarLayer.on('tileload', function() {
             noDataEl.classList.add('hidden');
         });
+    }
 
-        radarLayer.on('tileerror', function() {
-            // silently handle - some tiles at edges may fail
-        });
+    function showRadar() {
+        var step = parseInt(slider.value, 10);
+        var isoTime = stepToISOTime(step);
 
-        radarLayer.addTo(map);
+        if (!radarLayer) {
+            createRadarLayer();
+            return;
+        }
+
+        // Just update the time param - much faster, reuses tile infrastructure
+        radarLayer.setParams({ time: isoTime });
+    }
+
+    function forceRefresh() {
+        // Full refresh: remove and recreate layer to bust cache
+        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+        createRadarLayer();
     }
 
     // --- Slider ---
@@ -357,7 +368,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         });
         btnRefresh.addEventListener('click', function () {
             btnRefresh.classList.add('spinning');
-            showRadar();
+            forceRefresh();
             updateLastRefreshTime();
             setTimeout(function() { btnRefresh.classList.remove('spinning'); }, 600);
         });
