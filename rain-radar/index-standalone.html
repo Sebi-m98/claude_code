@@ -10,7 +10,7 @@
 html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
 #map { width: 100%; height: 100%; z-index: 1; }
 
-/* Top bar with time + search */
+/* Top bar */
 #top-bar {
     position: absolute;
     top: 12px;
@@ -25,7 +25,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 #top-bar > * { pointer-events: auto; }
 
 #time-display {
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.78);
     color: #fff;
     padding: 8px 14px;
     border-radius: 8px;
@@ -33,64 +33,63 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
-#search-container {
-    display: flex;
-    gap: 4px;
-    flex: 1;
-    max-width: 360px;
-}
-
+#search-container { display: flex; gap: 4px; flex: 1; max-width: 340px; }
 #search-input {
     flex: 1;
     padding: 8px 12px;
     border: none;
     border-radius: 8px;
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.78);
     color: #fff;
     font-size: 14px;
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     outline: none;
     min-width: 0;
 }
 #search-input::placeholder { color: rgba(255,255,255,0.4); }
-#search-input:focus { box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 2px rgba(77,166,255,0.5); }
+#search-input:focus { box-shadow: 0 0 0 2px rgba(77,166,255,0.5); }
 
 .icon-btn {
-    width: 38px;
-    height: 38px;
-    border: none;
-    border-radius: 8px;
-    background: rgba(0,0,0,0.75);
-    color: #fff;
-    font-size: 16px;
+    width: 38px; height: 38px;
+    border: none; border-radius: 8px;
+    background: rgba(0,0,0,0.78);
+    color: #fff; font-size: 16px;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     flex-shrink: 0;
     transition: background 0.15s;
 }
-.icon-btn:hover { background: rgba(0,0,0,0.9); }
+.icon-btn:hover { background: rgba(0,0,0,0.92); }
 
-/* Spacer pushes legend to the right */
 #top-spacer { flex: 1; pointer-events: none; }
+
+/* Data source badge */
+#source-badge {
+    background: rgba(0,0,0,0.78);
+    color: rgba(255,255,255,0.7);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    flex-shrink: 0;
+    line-height: 1.4;
+    text-align: center;
+}
+#source-badge strong { color: #fff; }
 
 /* Legend */
 #legend {
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.78);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     border-radius: 8px;
     padding: 10px 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
@@ -98,149 +97,98 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 }
 .legend-title { color: rgba(255,255,255,0.7); font-size: 11px; text-align: center; margin-bottom: 6px; }
 .legend-items { display: flex; flex-direction: column; gap: 3px; }
-.legend-item { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.85); font-size: 11px; font-variant-numeric: tabular-nums; }
+.legend-item { display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.85); font-size: 11px; }
 .legend-color { width: 16px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 
-/* Bottom slider bar */
+/* Slider bar */
 #slider-bar {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: 0; left: 0; right: 0;
     z-index: 1000;
     background: rgba(20,25,35,0.92);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     padding: 10px 16px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    display: flex; flex-direction: column; gap: 6px;
     box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
 }
 
 #slider-container { display: flex; align-items: center; gap: 10px; }
 #slider-label-start, #slider-label-end {
-    color: rgba(255,255,255,0.6);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
-}
-
-/* Data availability bar */
-#availability-bar {
-    position: relative;
-    height: 4px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 2px;
-    margin: 0 42px;
-    overflow: hidden;
-}
-#availability-fill {
-    position: absolute;
-    height: 100%;
-    background: rgba(77,166,255,0.5);
-    border-radius: 2px;
-    transition: left 0.3s, width 0.3s;
+    color: rgba(255,255,255,0.6); font-size: 12px;
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
 }
 
 #time-slider {
-    flex: 1;
-    height: 6px;
-    -webkit-appearance: none;
-    appearance: none;
+    flex: 1; height: 6px;
+    -webkit-appearance: none; appearance: none;
     background: rgba(255,255,255,0.15);
-    border-radius: 3px;
-    outline: none;
-    cursor: pointer;
+    border-radius: 3px; outline: none; cursor: pointer;
 }
 #time-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: #4da6ff;
-    border: 3px solid #fff;
-    cursor: pointer;
+    -webkit-appearance: none; width: 20px; height: 20px;
+    border-radius: 50%; background: #4da6ff;
+    border: 3px solid #fff; cursor: pointer;
     box-shadow: 0 1px 6px rgba(0,0,0,0.4);
     transition: transform 0.1s;
 }
 #time-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 #time-slider::-moz-range-thumb {
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: #4da6ff;
-    border: 3px solid #fff;
-    cursor: pointer;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #4da6ff; border: 3px solid #fff;
+    cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,0.4);
 }
 #time-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
 #time-slider::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.15); }
 
-#slider-controls { display: flex; justify-content: center; gap: 8px; }
+#slider-controls { display: flex; justify-content: center; gap: 8px; align-items: center; }
 #slider-controls button {
     background: rgba(255,255,255,0.12);
     border: 1px solid rgba(255,255,255,0.15);
-    color: #fff;
-    padding: 6px 16px;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background 0.15s;
-    user-select: none;
+    color: #fff; padding: 6px 16px; border-radius: 6px;
+    font-size: 14px; cursor: pointer;
+    transition: background 0.15s; user-select: none;
 }
 #slider-controls button:hover { background: rgba(255,255,255,0.22); }
 #slider-controls button:active { background: rgba(255,255,255,0.3); }
-#btn-now {
-    background: rgba(77,166,255,0.3) !important;
-    border-color: rgba(77,166,255,0.5) !important;
-    font-weight: 600;
-}
+#btn-now { background: rgba(77,166,255,0.3) !important; border-color: rgba(77,166,255,0.5) !important; font-weight: 600; }
 #btn-now:hover { background: rgba(77,166,255,0.45) !important; }
-#btn-refresh {
-    font-size: 15px;
-    padding: 6px 12px;
-}
+#btn-refresh { font-size: 15px; padding: 6px 12px; }
 #btn-refresh.spinning { animation: spin 0.6s ease; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-/* No data indicator */
+#last-update {
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    margin-left: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* No data */
 #no-data {
-    position: absolute;
-    top: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    background: rgba(180,80,0,0.85);
-    color: #fff;
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 13px;
-    backdrop-filter: blur(8px);
-    transition: opacity 0.3s;
-    white-space: nowrap;
+    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+    z-index: 1000; background: rgba(180,80,0,0.85);
+    color: #fff; padding: 6px 14px; border-radius: 6px;
+    font-size: 13px; backdrop-filter: blur(8px);
+    transition: opacity 0.3s; white-space: nowrap;
 }
 #no-data.hidden { opacity: 0; pointer-events: none; }
 
-/* Leaflet overrides - move zoom to right side below legend */
+/* Zoom controls - bottom right, above slider */
 .leaflet-top.leaflet-left { top: auto !important; left: auto !important; }
 .leaflet-control-zoom {
     position: fixed !important;
-    right: 12px !important;
-    top: auto !important;
-    bottom: 110px !important;
+    right: 12px !important; bottom: 110px !important;
     border: none !important;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
     z-index: 1000 !important;
 }
 .leaflet-control-zoom a {
-    background: rgba(0,0,0,0.75) !important;
-    color: #fff !important;
-    border: none !important;
-    width: 34px !important;
-    height: 34px !important;
-    line-height: 34px !important;
-    font-size: 16px !important;
+    background: rgba(0,0,0,0.78) !important;
+    color: #fff !important; border: none !important;
+    width: 34px !important; height: 34px !important;
+    line-height: 34px !important; font-size: 16px !important;
 }
-.leaflet-control-zoom a:hover { background: rgba(0,0,0,0.9) !important; }
+.leaflet-control-zoom a:hover { background: rgba(0,0,0,0.92) !important; }
 .leaflet-control-attribution {
     background: rgba(0,0,0,0.5) !important;
     color: rgba(255,255,255,0.6) !important;
@@ -248,41 +196,43 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 }
 .leaflet-control-attribution a { color: rgba(255,255,255,0.7) !important; }
 
-/* Search results dropdown */
+/* Search results */
 #search-results {
-    position: absolute;
-    top: 48px;
-    left: 0;
-    right: 0;
-    max-width: 360px;
+    position: absolute; top: 50px; left: 90px;
+    max-width: 340px; width: calc(100% - 180px);
     background: rgba(20,25,35,0.95);
-    border-radius: 8px;
-    overflow: hidden;
+    border-radius: 8px; overflow: hidden;
     box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    display: none;
-    z-index: 1001;
-    margin-left: calc(38px + 8px + 14px + 8px);
+    display: none; z-index: 1001;
 }
 #search-results.visible { display: block; }
 .search-result-item {
-    padding: 10px 14px;
-    color: #fff;
-    font-size: 13px;
-    cursor: pointer;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 10px 14px; color: #fff; font-size: 13px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08);
     transition: background 0.1s;
 }
 .search-result-item:hover { background: rgba(255,255,255,0.1); }
 .search-result-item:last-child { border-bottom: none; }
 
+/* Loading overlay */
+#loading {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    z-index: 1001; background: rgba(0,0,0,0.7);
+    color: #fff; padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; display: none;
+}
+#loading.visible { display: block; }
+
 @media (max-width: 600px) {
     #time-display { font-size: 16px; padding: 6px 10px; }
-    #search-container { max-width: 200px; }
+    #search-container { max-width: 180px; }
     #search-input { font-size: 13px; padding: 6px 10px; }
     .icon-btn { width: 34px; height: 34px; font-size: 14px; }
     #slider-bar { padding: 8px 10px 12px; }
     #legend { padding: 8px 10px; }
     .legend-item { font-size: 10px; }
+    #source-badge { display: none; }
 }
     </style>
 </head>
@@ -290,47 +240,45 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     <div id="map"></div>
 
     <div id="top-bar">
-        <div id="time-display">
-            <span id="current-time">--:--</span>
-        </div>
+        <div id="time-display"><span id="current-time">--:--</span></div>
         <div id="search-container">
             <input type="text" id="search-input" placeholder="Ort suchen..." autocomplete="off" />
             <button class="icon-btn" id="btn-locate" title="Mein Standort">&#9737;</button>
         </div>
         <div id="top-spacer"></div>
+        <div id="source-badge"><strong>DWD</strong> Radar<br>Ganzer Tag</div>
         <div id="legend">
-            <div class="legend-title">mm/h</div>
+            <div class="legend-title">dBZ</div>
             <div class="legend-items">
-                <div class="legend-item"><span class="legend-color" style="background:#c8e8ff;"></span>0.1</div>
-                <div class="legend-item"><span class="legend-color" style="background:#a0d0ff;"></span>0.5</div>
-                <div class="legend-item"><span class="legend-color" style="background:#64b4ff;"></span>1</div>
-                <div class="legend-item"><span class="legend-color" style="background:#3296e6;"></span>2</div>
-                <div class="legend-item"><span class="legend-color" style="background:#0a82c8;"></span>5</div>
-                <div class="legend-item"><span class="legend-color" style="background:#0064a0;"></span>10</div>
-                <div class="legend-item"><span class="legend-color" style="background:#004678;"></span>20</div>
-                <div class="legend-item"><span class="legend-color" style="background:#6e28a0;"></span>50</div>
+                <div class="legend-item"><span class="legend-color" style="background:#97d3fb;"></span>&lt;7</div>
+                <div class="legend-item"><span class="legend-color" style="background:#0099ff;"></span>7-19</div>
+                <div class="legend-item"><span class="legend-color" style="background:#00ff00;"></span>19-28</div>
+                <div class="legend-item"><span class="legend-color" style="background:#ffff00;"></span>28-37</div>
+                <div class="legend-item"><span class="legend-color" style="background:#ff9900;"></span>37-46</div>
+                <div class="legend-item"><span class="legend-color" style="background:#ff0000;"></span>46-55</div>
+                <div class="legend-item"><span class="legend-color" style="background:#cc00cc;"></span>&gt;55</div>
             </div>
         </div>
     </div>
 
     <div id="search-results"></div>
+    <div id="no-data" class="hidden">Keine Radardaten verfuegbar</div>
+    <div id="loading">Lade Radardaten...</div>
 
     <div id="slider-bar">
-        <div id="availability-bar"><div id="availability-fill"></div></div>
         <div id="slider-container">
             <span id="slider-label-start">00:00</span>
             <input type="range" id="time-slider" min="0" max="143" step="1" value="0" />
             <span id="slider-label-end">23:50</span>
         </div>
         <div id="slider-controls">
-            <button id="btn-back" title="10 Min zurück">&#9664;</button>
+            <button id="btn-back" title="10 Min zurueck">&#9664;</button>
             <button id="btn-now" title="Jetzt">Jetzt</button>
             <button id="btn-forward" title="10 Min vor">&#9654;</button>
             <button id="btn-refresh" title="Daten aktualisieren">&#8635;</button>
+            <span id="last-update"></span>
         </div>
     </div>
-
-    <div id="no-data" class="hidden">Keine Radardaten für diesen Zeitpunkt</div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
@@ -342,12 +290,20 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     var DEFAULT_ZOOM = 7;
     var STEPS_PER_DAY = 144; // 24h * 6 (every 10 min)
     var STEP_MINUTES = 10;
-    var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
+    var REFRESH_INTERVAL = 2 * 60 * 1000; // 2 min
     var NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
-    var REFRESH_INTERVAL = 2 * 60 * 1000; // 2 minutes
+
+    // DWD WMS - Free, full day radar data
+    var DWD_WMS_URL = 'https://maps.dwd.de/geoserver/dwd/wms';
+    var DWD_LAYER = 'dwd:RX-Produkt'; // 5-min radar composite
+
+    // RainViewer as fallback
+    var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 
     // --- State ---
-    var map, radarLayer = null, rainviewerData = null, allFrames = [];
+    var map, dwdLayer = null, rainviewerLayer = null;
+    var rainviewerData = null, rainviewerFrames = [];
+    var currentSource = 'dwd'; // 'dwd' or 'rainviewer'
     var searchTimeout = null;
 
     // --- DOM ---
@@ -361,16 +317,18 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     var searchInput = document.getElementById('search-input');
     var searchResults = document.getElementById('search-results');
     var noDataEl = document.getElementById('no-data');
-    var availFill = document.getElementById('availability-fill');
+    var lastUpdateEl = document.getElementById('last-update');
+    var sourceBadge = document.getElementById('source-badge');
+    var loadingEl = document.getElementById('loading');
 
     // --- Init ---
     function init() {
         initMap();
-        loadRainViewerData();
         initSlider();
         initControls();
         initSearch();
-        setInterval(loadRainViewerData, REFRESH_INTERVAL);
+        refreshData();
+        setInterval(function() { refreshData(); }, REFRESH_INTERVAL);
     }
 
     function initMap() {
@@ -381,71 +339,130 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             attributionControl: true
         });
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a> | Radar: <a href="https://www.rainviewer.com/">RainViewer</a>',
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 18
         }).addTo(map);
     }
 
-    // --- RainViewer API ---
+    // --- Data Loading ---
+    async function refreshData() {
+        // Try DWD WMS first, load RainViewer as fallback
+        updateLastRefreshTime();
+        loadDWDRadar();
+        await loadRainViewerData();
+    }
+
+    function loadDWDRadar() {
+        var step = parseInt(slider.value, 10);
+        var isoTime = stepToISOTime(step);
+
+        if (dwdLayer) { map.removeLayer(dwdLayer); dwdLayer = null; }
+
+        dwdLayer = L.tileLayer.wms(DWD_WMS_URL, {
+            layers: DWD_LAYER,
+            format: 'image/png',
+            transparent: true,
+            version: '1.3.0',
+            time: isoTime,
+            attribution: '<a href="https://www.dwd.de">DWD</a>',
+            opacity: 0.75,
+            maxZoom: 18
+        });
+
+        // Test if DWD works by listening for tile errors
+        var errorCount = 0;
+        var loadCount = 0;
+
+        dwdLayer.on('tileerror', function() {
+            errorCount++;
+            if (errorCount > 2 && loadCount === 0) {
+                // DWD not working, fall back to RainViewer
+                console.log('DWD WMS not available, using RainViewer');
+                switchToRainViewer();
+            }
+        });
+
+        dwdLayer.on('tileload', function() {
+            loadCount++;
+            if (loadCount === 1) {
+                currentSource = 'dwd';
+                updateSourceBadge();
+                noDataEl.classList.add('hidden');
+            }
+        });
+
+        dwdLayer.addTo(map);
+    }
+
+    function switchToRainViewer() {
+        if (dwdLayer) { map.removeLayer(dwdLayer); dwdLayer = null; }
+        currentSource = 'rainviewer';
+        updateSourceBadge();
+        updateRainViewerLayer();
+    }
+
     async function loadRainViewerData() {
         try {
             var response = await fetch(RAINVIEWER_API + '?_=' + Date.now());
             var data = await response.json();
             rainviewerData = data;
-
             var past = data.radar && data.radar.past ? data.radar.past : [];
             var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
-            allFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
-
-            updateAvailabilityBar();
-            updateRadarForSlider();
+            rainviewerFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
         } catch (err) {
-            console.error('RainViewer load error:', err);
+            console.error('RainViewer error:', err);
         }
     }
 
-    function updateAvailabilityBar() {
-        if (allFrames.length === 0) {
-            availFill.style.left = '0%';
-            availFill.style.width = '0%';
-            return;
-        }
-        var now = new Date();
-        var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
-        var dayEnd = dayStart + 86400;
-        var firstTs = Math.max(allFrames[0].time, dayStart);
-        var lastTs = Math.min(allFrames[allFrames.length - 1].time, dayEnd);
-        var leftPct = ((firstTs - dayStart) / 86400) * 100;
-        var widthPct = ((lastTs - firstTs) / 86400) * 100;
-        availFill.style.left = leftPct + '%';
-        availFill.style.width = widthPct + '%';
-    }
-
-    function findClosestFrame(targetUnix) {
-        if (allFrames.length === 0) return null;
-        var closest = allFrames[0];
-        var minDiff = Math.abs(targetUnix - closest.time);
-        for (var i = 1; i < allFrames.length; i++) {
-            var diff = Math.abs(targetUnix - allFrames[i].time);
-            if (diff < minDiff) { minDiff = diff; closest = allFrames[i]; }
-        }
-        // Match within 10 minutes
-        return minDiff <= 600 ? closest : null;
-    }
-
-    function setRadarLayer(frame) {
-        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
-        if (!frame || !rainviewerData) {
+    function updateRainViewerLayer() {
+        if (rainviewerLayer) { map.removeLayer(rainviewerLayer); rainviewerLayer = null; }
+        if (!rainviewerData || rainviewerFrames.length === 0) {
             noDataEl.classList.remove('hidden');
             return;
         }
+
+        var step = parseInt(slider.value, 10);
+        var targetUnix = stepToUnixTimestamp(step);
+        var frame = findClosestFrame(targetUnix);
+
+        if (!frame) {
+            noDataEl.classList.remove('hidden');
+            return;
+        }
+
         noDataEl.classList.add('hidden');
         var tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
-        radarLayer = L.tileLayer(
+        rainviewerLayer = L.tileLayer(
             rainviewerData.host + frame.path + '/' + tileSize + '/{z}/{x}/{y}/2/1_1.png',
             { tileSize: 256, opacity: 0.8, zIndex: 100, maxNativeZoom: 7, maxZoom: 18 }
         ).addTo(map);
+    }
+
+    function findClosestFrame(targetUnix) {
+        if (rainviewerFrames.length === 0) return null;
+        var closest = rainviewerFrames[0];
+        var minDiff = Math.abs(targetUnix - closest.time);
+        for (var i = 1; i < rainviewerFrames.length; i++) {
+            var diff = Math.abs(targetUnix - rainviewerFrames[i].time);
+            if (diff < minDiff) { minDiff = diff; closest = rainviewerFrames[i]; }
+        }
+        return minDiff <= 600 ? closest : null;
+    }
+
+    function updateSourceBadge() {
+        if (currentSource === 'dwd') {
+            sourceBadge.innerHTML = '<strong>DWD</strong> Radar<br>Ganzer Tag';
+        } else {
+            sourceBadge.innerHTML = '<strong>RainViewer</strong><br>~2h Fenster';
+        }
+    }
+
+    function updateLastRefreshTime() {
+        var now = new Date();
+        lastUpdateEl.textContent = 'Aktualisiert ' +
+            String(now.getHours()).padStart(2, '0') + ':' +
+            String(now.getMinutes()).padStart(2, '0');
     }
 
     // --- Slider ---
@@ -456,7 +473,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         slider.addEventListener('input', function () {
             var step = parseInt(this.value, 10);
             updateTimeDisplay(step);
-            updateRadarForSlider();
+            updateRadar();
         });
     }
 
@@ -473,6 +490,13 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
     }
 
+    function stepToISOTime(step) {
+        var now = new Date();
+        var d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        d.setMinutes(step * STEP_MINUTES);
+        return d.toISOString();
+    }
+
     function stepToUnixTimestamp(step) {
         var now = new Date();
         var dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -483,35 +507,37 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         timeDisplay.textContent = stepToTime(step);
     }
 
-    function updateRadarForSlider() {
-        var step = parseInt(slider.value, 10);
-        var targetUnix = stepToUnixTimestamp(step);
-        var frame = findClosestFrame(targetUnix);
-        setRadarLayer(frame);
+    function updateRadar() {
+        if (currentSource === 'dwd') {
+            loadDWDRadar();
+        } else {
+            updateRainViewerLayer();
+        }
     }
 
     // --- Controls ---
     function initControls() {
         btnBack.addEventListener('click', function () {
             var c = parseInt(slider.value, 10);
-            if (c > 0) { slider.value = c - 1; updateTimeDisplay(c - 1); updateRadarForSlider(); }
+            if (c > 0) { slider.value = c - 1; updateTimeDisplay(c - 1); updateRadar(); }
         });
         btnForward.addEventListener('click', function () {
             var c = parseInt(slider.value, 10);
-            if (c < STEPS_PER_DAY - 1) { slider.value = c + 1; updateTimeDisplay(c + 1); updateRadarForSlider(); }
+            if (c < STEPS_PER_DAY - 1) { slider.value = c + 1; updateTimeDisplay(c + 1); updateRadar(); }
         });
         btnNow.addEventListener('click', function () {
             var s = getCurrentTimeStep();
-            slider.value = s; updateTimeDisplay(s); updateRadarForSlider();
+            slider.value = s; updateTimeDisplay(s); updateRadar();
         });
         btnRefresh.addEventListener('click', function () {
             btnRefresh.classList.add('spinning');
-            loadRainViewerData().then(function() {
+            refreshData().then(function() {
+                updateRadar();
                 setTimeout(function() { btnRefresh.classList.remove('spinning'); }, 600);
             });
         });
         btnLocate.addEventListener('click', function () {
-            if (!navigator.geolocation) { alert('Geolocation wird nicht unterstützt.'); return; }
+            if (!navigator.geolocation) { alert('Geolocation nicht verfuegbar.'); return; }
             btnLocate.textContent = '...';
             navigator.geolocation.getCurrentPosition(
                 function (pos) {
@@ -526,16 +552,16 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             );
         });
 
-        // Keyboard
         document.addEventListener('keydown', function (e) {
             if (e.target === searchInput) return;
             if (e.key === 'ArrowLeft') { btnBack.click(); e.preventDefault(); }
             else if (e.key === 'ArrowRight') { btnForward.click(); e.preventDefault(); }
             else if (e.key === ' ' || e.key === 'Home') { btnNow.click(); e.preventDefault(); }
+            else if (e.key === 'r' || e.key === 'R') { btnRefresh.click(); e.preventDefault(); }
         });
     }
 
-    // --- Search (Nominatim / OpenStreetMap) ---
+    // --- Search ---
     function initSearch() {
         searchInput.addEventListener('input', function () {
             clearTimeout(searchTimeout);
@@ -543,7 +569,6 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             if (query.length < 2) { hideSearchResults(); return; }
             searchTimeout = setTimeout(function () { searchLocation(query); }, 400);
         });
-
         searchInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -552,11 +577,8 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             }
             if (e.key === 'Escape') { hideSearchResults(); searchInput.blur(); }
         });
-
         document.addEventListener('click', function (e) {
-            if (!searchResults.contains(e.target) && e.target !== searchInput) {
-                hideSearchResults();
-            }
+            if (!searchResults.contains(e.target) && e.target !== searchInput) hideSearchResults();
         });
     }
 
@@ -564,14 +586,10 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         try {
             var url = NOMINATIM_API + '?q=' + encodeURIComponent(query) +
                 '&format=json&addressdetails=1&limit=5&countrycodes=de,at,ch&accept-language=de';
-            var response = await fetch(url, {
-                headers: { 'User-Agent': 'RegenRadar-App/1.0' }
-            });
+            var response = await fetch(url, { headers: { 'User-Agent': 'RegenRadar-App/1.0' } });
             var results = await response.json();
             showSearchResults(results);
-        } catch (err) {
-            console.error('Search error:', err);
-        }
+        } catch (err) { console.error('Search error:', err); }
     }
 
     function showSearchResults(results) {
@@ -595,9 +613,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         searchResults.classList.add('visible');
     }
 
-    function hideSearchResults() {
-        searchResults.classList.remove('visible');
-    }
+    function hideSearchResults() { searchResults.classList.remove('visible'); }
 
     // --- Start ---
     document.addEventListener('DOMContentLoaded', init);
