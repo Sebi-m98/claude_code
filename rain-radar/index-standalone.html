@@ -273,7 +273,16 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
             rainviewerData = data;
             var past = data.radar && data.radar.past ? data.radar.past : [];
             var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
+
+            console.log('RainViewer past frames:', past.length,
+                past.length ? '(' + unixToTime(past[0].time) + ' - ' + unixToTime(past[past.length-1].time) + ')' : '');
+            console.log('RainViewer nowcast frames:', nowcast.length,
+                nowcast.length ? '(' + unixToTime(nowcast[0].time) + ' - ' + unixToTime(nowcast[nowcast.length-1].time) + ')' : '(LEER - Free Tier?)');
+
             allFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
+            console.log('Total frames:', allFrames.length,
+                allFrames.length ? unixToTime(allFrames[0].time) + ' - ' + unixToTime(allFrames[allFrames.length-1].time) : '');
+
             updateSliderRange();
         } catch (err) {
             console.error('RainViewer error:', err);
