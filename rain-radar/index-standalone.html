@@ -293,17 +293,18 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     var REFRESH_INTERVAL = 2 * 60 * 1000; // 2 min
     var NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
 
-    // DWD WMS - Free, full day radar data
-    var DWD_WMS_URL = 'https://maps.dwd.de/geoserver/dwd/wms';
-    var DWD_LAYER = 'dwd:RX-Produkt'; // 5-min radar composite
-
-    // RainViewer as fallback
+    // RainViewer - reliable, no key needed
     var RAINVIEWER_API = 'https://api.rainviewer.com/public/weather-maps.json';
 
+    // DWD WMS - try multiple layers as fallback for full-day
+    var DWD_WMS_URL = 'https://maps.dwd.de/geoserver/dwd/wms';
+    var DWD_LAYERS = ['dwd:RX-Produkt', 'dwd:Niederschlagsradar', 'dwd:WN-Produkt'];
+
     // --- State ---
-    var map, dwdLayer = null, rainviewerLayer = null;
+    var map, radarLayer = null;
     var rainviewerData = null, rainviewerFrames = [];
-    var currentSource = 'dwd'; // 'dwd' or 'rainviewer'
+    var dwdAvailable = false;
+    var dwdLayerName = null;
     var searchTimeout = null;
 
     // --- DOM ---
@@ -346,83 +347,64 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     }
 
     // --- Data Loading ---
+    // Step 1: Always load RainViewer first (reliable)
+    // Step 2: Try DWD WMS in background (full day if it works)
     async function refreshData() {
-        // Try DWD WMS first, load RainViewer as fallback
-        updateLastRefreshTime();
-        loadDWDRadar();
+        // Always fetch fresh RainViewer data first
         await loadRainViewerData();
-    }
-
-    function loadDWDRadar() {
-        var step = parseInt(slider.value, 10);
-        var isoTime = stepToISOTime(step);
-
-        if (dwdLayer) { map.removeLayer(dwdLayer); dwdLayer = null; }
-
-        dwdLayer = L.tileLayer.wms(DWD_WMS_URL, {
-            layers: DWD_LAYER,
-            format: 'image/png',
-            transparent: true,
-            version: '1.3.0',
-            time: isoTime,
-            attribution: '<a href="https://www.dwd.de">DWD</a>',
-            opacity: 0.75,
-            maxZoom: 18
-        });
-
-        // Test if DWD works by listening for tile errors
-        var errorCount = 0;
-        var loadCount = 0;
-
-        dwdLayer.on('tileerror', function() {
-            errorCount++;
-            if (errorCount > 2 && loadCount === 0) {
-                // DWD not working, fall back to RainViewer
-                console.log('DWD WMS not available, using RainViewer');
-                switchToRainViewer();
-            }
-        });
-
-        dwdLayer.on('tileload', function() {
-            loadCount++;
-            if (loadCount === 1) {
-                currentSource = 'dwd';
-                updateSourceBadge();
-                noDataEl.classList.add('hidden');
-            }
-        });
-
-        dwdLayer.addTo(map);
-    }
-
-    function switchToRainViewer() {
-        if (dwdLayer) { map.removeLayer(dwdLayer); dwdLayer = null; }
-        currentSource = 'rainviewer';
-        updateSourceBadge();
-        updateRainViewerLayer();
+        // Show radar for current slider position
+        showRadar();
+        // Try DWD WMS in background (only once)
+        if (!dwdAvailable && !dwdLayerName) {
+            testDWDLayers();
+        }
+        updateLastRefreshTime();
     }
 
     async function loadRainViewerData() {
         try {
-            var response = await fetch(RAINVIEWER_API + '?_=' + Date.now());
+            // cache: no-store ensures truly fresh data every time
+            var response = await fetch(RAINVIEWER_API, { cache: 'no-store' });
             var data = await response.json();
             rainviewerData = data;
             var past = data.radar && data.radar.past ? data.radar.past : [];
             var nowcast = data.radar && data.radar.nowcast ? data.radar.nowcast : [];
             rainviewerFrames = past.concat(nowcast).sort(function(a, b) { return a.time - b.time; });
+
+            // Log available window for debugging
+            if (rainviewerFrames.length > 0) {
+                var first = new Date(rainviewerFrames[0].time * 1000);
+                var last = new Date(rainviewerFrames[rainviewerFrames.length - 1].time * 1000);
+                console.log('RainViewer: ' + rainviewerFrames.length + ' frames, ' +
+                    first.toLocaleTimeString() + ' - ' + last.toLocaleTimeString());
+                updateSourceBadge(first, last);
+            }
         } catch (err) {
             console.error('RainViewer error:', err);
         }
     }
 
-    function updateRainViewerLayer() {
-        if (rainviewerLayer) { map.removeLayer(rainviewerLayer); rainviewerLayer = null; }
+    function showRadar() {
+        if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+
+        var step = parseInt(slider.value, 10);
+
+        // If DWD is available, use it (full day coverage)
+        if (dwdAvailable && dwdLayerName) {
+            showDWDRadar(step);
+            return;
+        }
+
+        // Otherwise use RainViewer
+        showRainViewerRadar(step);
+    }
+
+    function showRainViewerRadar(step) {
         if (!rainviewerData || rainviewerFrames.length === 0) {
             noDataEl.classList.remove('hidden');
             return;
         }
 
-        var step = parseInt(slider.value, 10);
         var targetUnix = stepToUnixTimestamp(step);
         var frame = findClosestFrame(targetUnix);
 
@@ -433,10 +415,69 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
 
         noDataEl.classList.add('hidden');
         var tileSize = window.devicePixelRatio >= 2 ? 512 : 256;
-        rainviewerLayer = L.tileLayer(
+        radarLayer = L.tileLayer(
             rainviewerData.host + frame.path + '/' + tileSize + '/{z}/{x}/{y}/2/1_1.png',
             { tileSize: 256, opacity: 0.8, zIndex: 100, maxNativeZoom: 7, maxZoom: 18 }
         ).addTo(map);
+    }
+
+    function showDWDRadar(step) {
+        var isoTime = stepToISOTime(step);
+        radarLayer = L.tileLayer.wms(DWD_WMS_URL, {
+            layers: dwdLayerName,
+            format: 'image/png',
+            transparent: true,
+            version: '1.3.0',
+            time: isoTime,
+            attribution: '<a href="https://www.dwd.de">DWD</a>',
+            opacity: 0.75,
+            maxZoom: 18
+        }).addTo(map);
+        noDataEl.classList.add('hidden');
+    }
+
+    // Test DWD WMS layers - try each until one works
+    function testDWDLayers() {
+        var idx = 0;
+        function tryNext() {
+            if (idx >= DWD_LAYERS.length) {
+                console.log('DWD WMS: no working layer found, using RainViewer only');
+                return;
+            }
+            var layerName = DWD_LAYERS[idx];
+            console.log('Testing DWD layer: ' + layerName);
+            var testLayer = L.tileLayer.wms(DWD_WMS_URL, {
+                layers: layerName,
+                format: 'image/png',
+                transparent: true,
+                version: '1.3.0',
+                opacity: 0.01,
+                maxZoom: 18
+            });
+            var errors = 0, loaded = 0;
+            testLayer.on('tileload', function() {
+                loaded++;
+                if (loaded === 1) {
+                    console.log('DWD layer works: ' + layerName);
+                    dwdAvailable = true;
+                    dwdLayerName = layerName;
+                    map.removeLayer(testLayer);
+                    // Switch to DWD for full-day coverage
+                    showRadar();
+                    updateSourceBadge();
+                }
+            });
+            testLayer.on('tileerror', function() {
+                errors++;
+                if (errors > 2 && loaded === 0) {
+                    map.removeLayer(testLayer);
+                    idx++;
+                    tryNext();
+                }
+            });
+            testLayer.addTo(map);
+        }
+        tryNext();
     }
 
     function findClosestFrame(targetUnix) {
@@ -450,11 +491,15 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
         return minDiff <= 600 ? closest : null;
     }
 
-    function updateSourceBadge() {
-        if (currentSource === 'dwd') {
+    function updateSourceBadge(first, last) {
+        if (dwdAvailable) {
             sourceBadge.innerHTML = '<strong>DWD</strong> Radar<br>Ganzer Tag';
+        } else if (first && last) {
+            var f = String(first.getHours()).padStart(2,'0') + ':' + String(first.getMinutes()).padStart(2,'0');
+            var l = String(last.getHours()).padStart(2,'0') + ':' + String(last.getMinutes()).padStart(2,'0');
+            sourceBadge.innerHTML = '<strong>RainViewer</strong><br>' + f + ' - ' + l;
         } else {
-            sourceBadge.innerHTML = '<strong>RainViewer</strong><br>~2h Fenster';
+            sourceBadge.innerHTML = '<strong>RainViewer</strong>';
         }
     }
 
@@ -508,11 +553,7 @@ html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSyst
     }
 
     function updateRadar() {
-        if (currentSource === 'dwd') {
-            loadDWDRadar();
-        } else {
-            updateRainViewerLayer();
-        }
+        showRadar();
     }
 
     // --- Controls ---
