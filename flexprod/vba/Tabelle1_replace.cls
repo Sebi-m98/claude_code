@@ -17,12 +17,12 @@ Attribute VB_Customizable = True
 
 Sub Umschaltung_Klicken()
     ' v2.7: ruft den neuen InputBox-Dialog (mit Anzahl-Stifte-Feld) auf.
-    ' Das alte frmUmschaltung wird nicht mehr verwendet (kann geloescht werden).
-    If ActiveWorkbook.Sheets("Schaltzettel").Cells(1, 1).Value = "" Then
-        Modul_UmschaltungDialog.Umschaltung_Dialog_Anzeigen
-    Else
-        MsgBox "Umschaltung bereits durchgefuehrt."
-    End If
+    ' Mehrfach-Umschaltungen sind jetzt erlaubt: nach einer Umschaltung kann
+    ' der Button erneut gedrueckt werden, um z.B. einen weiteren Stiftbereich
+    ' an anderer Stelle in der gleichen Spalte umzuschalten. Die Logik in
+    ' Modul_Umschaltung erkennt bereits umgeschaltete Zeilen anhand der schon
+    ' geaenderten EVS-Bezeichnung und ueberspringt sie automatisch.
+    Modul_UmschaltungDialog.Umschaltung_Dialog_Anzeigen
 End Sub
 
 Sub Schaltzettel_Undo_Klicken()

@@ -65,9 +65,21 @@ Bei jedem InputBox "Anzahl Stifte umschalten":
 
 Die Strikethrough-Markierung der alten Werte und die rote Hervorhebung der neuen Werte funktioniert wie in v2.6.
 
+## Mehrfach-Umschaltungen
+
+Der Umschaltung-Button ist **nicht mehr nach der ersten Aktion gesperrt**. Du kannst:
+- mehrfach hintereinander den Button druecken
+- in einer Spalte mehrere Stiftbereiche mit unterschiedlichen Beginnwerten umschalten
+- z.B. erst R8 -> R9 ab Stift 20 (Anzahl 5), dann R8 -> R9 ab Stift 30 (Anzahl 3) ueber den verbleibenden Bereich
+- auch die Umschaltungs-Variante (HVt-L / EVS Stift an / EVS Stift ab / KVz) zwischen Aktionen wechseln
+
+Bereits umgeschaltete Zeilen werden bei der naechsten Umschaltung automatisch erkannt (an der bereits geaenderten EVS-Bezeichnung) und uebersprungen - Doppelumschaltungen passieren nicht aus Versehen.
+
 ## Undo-Buffer
 
-Der Undo-Mechanismus speichert die letzte Umschaltung in einem versteckten Sheet `_UndoBuffer`. Beim naechsten Umschalten wird der Buffer ueberschrieben (Single-Level-Undo). Nach erfolgreichem Undo ist der Buffer leer.
+Der Undo-Mechanismus speichert **die jeweils letzte Umschaltung** in einem versteckten Sheet `_UndoBuffer`. Beim naechsten Umschalten wird der Buffer ueberschrieben (Single-Level-Undo). Nach erfolgreichem Undo ist der Buffer leer.
+
+Praktische Konsequenz fuer Mehrfach-Umschaltungen: nach 3 aufeinanderfolgenden Umschaltungen kann man via Undo nur die **3.** zurueckdrehen, nicht die 1. oder 2. Wer alle drei rueckgaengig machen will, sollte **vor jeder Umschaltung** kurz das Ergebnis pruefen und ggf. zwischendurch den Undo-Button benutzen.
 
 `_UndoBuffer` ist mit `xlSheetVeryHidden` markiert - wird in der Reiter-Liste nicht angezeigt und kann nur via VBA-Editor sichtbar gemacht werden.
 
