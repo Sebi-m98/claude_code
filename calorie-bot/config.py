@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID", "").strip()
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "./credentials.json").strip()
 
@@ -18,8 +18,8 @@ def assert_configured() -> None:
     missing = []
     if not TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
-    if not ANTHROPIC_API_KEY:
-        missing.append("ANTHROPIC_API_KEY")
+    if not GEMINI_API_KEY:
+        missing.append("GEMINI_API_KEY")
     if not GOOGLE_SHEETS_ID:
         missing.append("GOOGLE_SHEETS_ID")
     if not os.path.exists(GOOGLE_CREDENTIALS_PATH):

@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Anthropic Vision Request bauen aus Telegram-Foto\nconst item = $input.first();\nconst binaryKey = Object.keys(item.binary || {})[0];\nif (!binaryKey) {\n  throw new Error('Kein Foto im Telegram-Update gefunden.');\n}\nconst bin = item.binary[binaryKey];\nconst chatId = item.json.message.chat.id;\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],\n        additionalProperties: false\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary'],\n  additionalProperties: false\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      model: 'claude-opus-4-7',\n      max_tokens: 2048,\n      system: 'Du analysierst Fotos von Mahlzeiten fuer einen Kalorientracking-Bot. Schaetze pro sichtbarem Lebensmittel: Name und Portionsgroesse in Gramm (anhand visueller Hinweise wie Tellergroesse, Besteck), und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Sei realistisch und konservativ. Antworte auf Deutsch.',\n      messages: [{\n        role: 'user',\n        content: [\n          {\n            type: 'image',\n            source: {\n              type: 'base64',\n              media_type: bin.mimeType || 'image/jpeg',\n              data: bin.data\n            }\n          },\n          { type: 'text', text: 'Analysiere diese Mahlzeit.' }\n        ]\n      }],\n      output_config: { format: { type: 'json_schema', schema } }\n    }\n  }\n}];"
+        "jsCode": "// Gemini Vision Request bauen aus Telegram-Foto\nconst item = $input.first();\nconst binaryKey = Object.keys(item.binary || {})[0];\nif (!binaryKey) {\n  throw new Error('Kein Foto im Telegram-Update gefunden.');\n}\nconst bin = item.binary[binaryKey];\nconst chatId = item.json.message.chat.id;\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat']\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary']\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      system_instruction: {\n        parts: [{ text: 'Du analysierst Fotos von Mahlzeiten fuer einen Kalorientracking-Bot. Schaetze pro sichtbarem Lebensmittel: Name und Portionsgroesse in Gramm (anhand visueller Hinweise wie Tellergroesse, Besteck), und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Sei realistisch und konservativ. Antworte auf Deutsch.' }]\n      },\n      contents: [{\n        role: 'user',\n        parts: [\n          { inline_data: { mime_type: bin.mimeType || 'image/jpeg', data: bin.data } },\n          { text: 'Analysiere diese Mahlzeit.' }\n        ]\n      }],\n      generationConfig: {\n        responseMimeType: 'application/json',\n        responseSchema: schema\n      }\n    }\n  }\n}];"
       },
       "id": "node-photo-build",
       "name": "Foto: Body bauen",
@@ -98,16 +98,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            },
             {
               "name": "content-type",
               "value": "application/json"
@@ -121,21 +117,21 @@
           "timeout": 60000
         }
       },
-      "id": "node-photo-anthropic",
-      "name": "Anthropic Vision",
+      "id": "node-photo-gemini",
+      "name": "Gemini Vision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [900, 200],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE-ANTHROPIC-CRED",
-          "name": "Anthropic API Key"
+          "id": "REPLACE-GEMINI-CRED",
+          "name": "Gemini API Key"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Anthropic Antwort parsen, Reply + Rows bauen\nconst chatId = $('Foto: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst textBlock = (resp.content || []).find(b => b.type === 'text');\nif (!textBlock) {\n  throw new Error('Keine Text-Antwort von Claude.');\n}\nconst parsed = JSON.parse(textBlock.text);\n\nconst now = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Foto',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📷 <b>Erkannt & geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
+        "jsCode": "// Gemini Antwort parsen, Reply + Rows bauen\nconst chatId = $('Foto: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst text = resp.candidates?.[0]?.content?.parts?.[0]?.text;\nif (!text) {\n  throw new Error('Keine Text-Antwort von Gemini: ' + JSON.stringify(resp).slice(0, 500));\n}\nconst parsed = JSON.parse(text);\n\nconst now = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Foto',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📷 <b>Erkannt & geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
       },
       "id": "node-photo-parse",
       "name": "Foto: Parse",
@@ -186,7 +182,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Anthropic Text Request bauen\nconst trigger = $('Telegram Trigger').first().json;\nconst chatId = trigger.message.chat.id;\nconst userText = trigger.message.text || '';\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],\n        additionalProperties: false\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary'],\n  additionalProperties: false\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      model: 'claude-opus-4-7',\n      max_tokens: 2048,\n      system: 'Du bist ein praeziser Ernaehrungs-Parser. Der User schickt auf Deutsch was er gegessen hat. Zerlege es in einzelne Lebensmittel und schaetze fuer jedes: Name, Portionsgroesse in Gramm, und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Wenn keine Menge angegeben ist, nimm typische Portionen an (z.B. 1 Ei = 60g). Sei realistisch.',\n      messages: [{ role: 'user', content: `Was ich gegessen habe: ${userText}` }],\n      output_config: { format: { type: 'json_schema', schema } }\n    }\n  }\n}];"
+        "jsCode": "// Gemini Text Request bauen\nconst trigger = $('Telegram Trigger').first().json;\nconst chatId = trigger.message.chat.id;\nconst userText = trigger.message.text || '';\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat']\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary']\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      system_instruction: {\n        parts: [{ text: 'Du bist ein praeziser Ernaehrungs-Parser. Der User schickt auf Deutsch was er gegessen hat. Zerlege es in einzelne Lebensmittel und schaetze fuer jedes: Name, Portionsgroesse in Gramm, und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Wenn keine Menge angegeben ist, nimm typische Portionen an (z.B. 1 Ei = 60g). Sei realistisch.' }]\n      },\n      contents: [{\n        role: 'user',\n        parts: [{ text: `Was ich gegessen habe: ${userText}` }]\n      }],\n      generationConfig: {\n        responseMimeType: 'application/json',\n        responseSchema: schema\n      }\n    }\n  }\n}];"
       },
       "id": "node-text-build",
       "name": "Text: Body bauen",
@@ -197,16 +193,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            },
             {
               "name": "content-type",
               "value": "application/json"
@@ -220,21 +212,21 @@
           "timeout": 60000
         }
       },
-      "id": "node-text-anthropic",
-      "name": "Anthropic Text",
+      "id": "node-text-gemini",
+      "name": "Gemini Text",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [900, 720],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE-ANTHROPIC-CRED",
-          "name": "Anthropic API Key"
+          "id": "REPLACE-GEMINI-CRED",
+          "name": "Gemini API Key"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Text-Antwort parsen, Reply + Rows bauen\nconst chatId = $('Text: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst textBlock = (resp.content || []).find(b => b.type === 'text');\nif (!textBlock) {\n  throw new Error('Keine Text-Antwort von Claude.');\n}\nconst parsed = JSON.parse(textBlock.text);\n\nconst now = new Date();\nconst pad = x => String(x).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Schätzung',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📝 <b>Geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
+        "jsCode": "// Gemini Text-Antwort parsen, Reply + Rows bauen\nconst chatId = $('Text: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst text = resp.candidates?.[0]?.content?.parts?.[0]?.text;\nif (!text) {\n  throw new Error('Keine Text-Antwort von Gemini: ' + JSON.stringify(resp).slice(0, 500));\n}\nconst parsed = JSON.parse(text);\n\nconst now = new Date();\nconst pad = x => String(x).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Schätzung',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📝 <b>Geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
       },
       "id": "node-text-parse",
       "name": "Text: Parse",
@@ -317,9 +309,9 @@
       ]
     },
     "Foto: Body bauen": {
-      "main": [[{"node": "Anthropic Vision", "type": "main", "index": 0}]]
+      "main": [[{"node": "Gemini Vision", "type": "main", "index": 0}]]
     },
-    "Anthropic Vision": {
+    "Gemini Vision": {
       "main": [[{"node": "Foto: Parse", "type": "main", "index": 0}]]
     },
     "Foto: Parse": {
@@ -338,9 +330,9 @@
       ]]
     },
     "Text: Body bauen": {
-      "main": [[{"node": "Anthropic Text", "type": "main", "index": 0}]]
+      "main": [[{"node": "Gemini Text", "type": "main", "index": 0}]]
     },
-    "Anthropic Text": {
+    "Gemini Text": {
       "main": [[{"node": "Text: Parse", "type": "main", "index": 0}]]
     },
     "Text: Parse": {

@@ -5,10 +5,10 @@ Text, Fotos oder EAN-Barcodes; er loggt alles in dein Google Sheet.
 
 ## Was er macht
 
-- **Text** ("2 Eier mit Toast und Butter") → Claude zerlegt + schätzt;
+- **Text** ("2 Eier mit Toast und Butter") → Gemini zerlegt + schätzt;
   Markenprodukte werden gegen [Open Food Facts](https://world.openfoodfacts.org)
   geprüft.
-- **Foto** vom Teller → Claude Vision schätzt Items, Portionsgrößen und Makros.
+- **Foto** vom Teller → Gemini Vision schätzt Items, Portionsgrößen und Makros.
 - **EAN-Barcode** (z.B. `4008400123456`) → Open Food Facts Lookup, dann fragt
   der Bot nach der Menge.
 - Jeder Eintrag muss kurz mit ✅/❌ bestätigt werden, bevor er ins Sheet geht.
@@ -28,7 +28,7 @@ Das Sheet hat drei Tabs:
 ## Setup
 
 Du brauchst dafür ca. 20 Minuten und drei kostenlose Accounts:
-Telegram, Anthropic Console, Google Cloud.
+Telegram, Google AI Studio, Google Cloud.
 
 ### 1. Code holen + Python einrichten
 
@@ -51,15 +51,16 @@ Optional: Schreib **[@userinfobot](https://t.me/userinfobot)** an, um deine
 eigene User-ID rauszufinden, und setz `ALLOWED_USER_IDS=<deine ID>` in `.env`,
 damit nur du den Bot benutzen kannst.
 
-### 3. Anthropic API Key
+### 3. Gemini API Key
 
-1. Account auf [console.anthropic.com](https://console.anthropic.com) anlegen
-   und ein paar Dollar Guthaben aufladen.
-2. Unter "API Keys" einen neuen Key erstellen.
-3. Als `ANTHROPIC_API_KEY=sk-ant-...` in `.env` eintragen.
+1. Geh auf [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+   (mit deinem normalen Google-Account einloggen).
+2. "Create API Key" klicken.
+3. Als `GEMINI_API_KEY=AIza...` in `.env` eintragen.
 
-Kostenrahmen: Pro Mahlzeit ca. 0,5–2 Cent (Foto teurer als Text). Bei 5
-Mahlzeiten/Tag landest du bei ~2-3 € pro Monat.
+Kostenrahmen: Gemini 2.5 Flash hat ein großzügiges Free Tier
+(1500 Requests/Tag). Bei normalem privaten Tracken bleibst du locker drin.
+Auch im Paid Tier extrem günstig — pro Mahlzeit ca. 0,01–0,1 Cent.
 
 ### 4. Google Sheet + Service Account
 
@@ -121,11 +122,11 @@ Schreib deinem Bot in Telegram `/start` — er sollte antworten.
 
 | Du schickst…                              | Was passiert                                  |
 | ----------------------------------------- | --------------------------------------------- |
-| `2 Eier mit Toast und Butter`             | Claude parst, OFF-Lookup, Bestätigung         |
-| `Skyr Natur 200g`                         | Claude parst, OFF findet Skyr Natur           |
-| `selbstgemachte Lasagne 350g`             | Claude schätzt direkt (kein OFF-Treffer)      |
+| `2 Eier mit Toast und Butter`             | Gemini parst, OFF-Lookup, Bestätigung         |
+| `Skyr Natur 200g`                         | Gemini parst, OFF findet Skyr Natur           |
+| `selbstgemachte Lasagne 350g`             | Gemini schätzt direkt (kein OFF-Treffer)      |
 | `4008400123456` (EAN)                     | OFF Barcode-Lookup, Bot fragt nach Gramm      |
-| 📷 Foto vom Teller                        | Claude Vision schätzt alle erkannten Items    |
+| 📷 Foto vom Teller                        | Gemini Vision schätzt alle erkannten Items    |
 | `/heute`                                  | Heutige Summen                                |
 | `/undo`                                   | Letzten Eintrag löschen                       |
 
@@ -184,7 +185,7 @@ der Service-Account-Email teilen (mit Bearbeiter-Rolle).
 **OFF findet nichts trotz korrektem Barcode**
 → Das Produkt ist noch nicht in OFF. Trag es selbst auf
 [world.openfoodfacts.org](https://world.openfoodfacts.org) ein (Crowd-Datenbank)
-oder schick die Beschreibung als Text — Claude schätzt dann.
+oder schick die Beschreibung als Text — Gemini schätzt dann.
 
 **Falsche Schätzungen bei Fotos**
 → Vision ist nicht perfekt. Bessere Fotos (gut beleuchtet, von oben, mit
@@ -200,7 +201,7 @@ läuft, in `.env` die Variable `TZ=Europe/Berlin` setzen.
 
 ```
 ┌──────────┐     ┌──────────────┐     ┌──────────────┐
-│ Telegram │────▶│   main.py    │────▶│   Claude     │
+│ Telegram │────▶│   main.py    │────▶│   Gemini     │
 └──────────┘     │  (Handlers)  │     │  (Vision +   │
                  └──────┬───────┘     │   Parsing)   │
                         │             └──────────────┘
@@ -217,7 +218,7 @@ läuft, in `.env` die Variable `TZ=Europe/Berlin` setzen.
 | Datei              | Funktion                                     |
 | ------------------ | -------------------------------------------- |
 | `main.py`          | Telegram-Handler, Bestätigungs-Flow          |
-| `ai_estimator.py`  | Claude API für Text-Parsing + Bild-Analyse   |
+| `ai_estimator.py`  | Gemini API für Text-Parsing + Bild-Analyse   |
 | `food_lookup.py`   | Open Food Facts Wrapper                      |
 | `sheets.py`        | Google Sheets Schreib-/Leseoperationen       |
 | `setup_sheets.py`  | Einmaliges Sheet-Setup                       |

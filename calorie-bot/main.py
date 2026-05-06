@@ -3,9 +3,9 @@ Telegram Kalorientracker - Hauptdatei.
 
 Flow:
 - /start, /help, /heute, /undo: Befehle
-- Foto: Claude Vision schaetzt + bestaetigen + loggen
+- Foto: Gemini Vision schaetzt + bestaetigen + loggen
 - Reine Ziffern (8-14): EAN-Barcode -> Open Food Facts -> nach Gramm fragen
-- Text: Claude parst Items + Open Food Facts Fallback -> bestaetigen + loggen
+- Text: Gemini parst Items + Open Food Facts Fallback -> bestaetigen + loggen
 """
 from __future__ import annotations
 

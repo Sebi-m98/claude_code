@@ -7,9 +7,9 @@ Mahlzeiten per Text, Foto oder EAN-Barcode in dein Google Sheet loggt.
 
 ```
 Telegram Trigger ─► Switch
-                     ├── 📷 Foto      → Claude Vision      → Sheet + Reply
+                     ├── 📷 Foto      → Gemini Vision      → Sheet + Reply
                      ├── 🔢 Barcode   → Open Food Facts    → Sheet + Reply
-                     └── 📝 Text      → Claude Opus 4.7    → Sheet + Reply
+                     └── 📝 Text      → Gemini 2.5 Flash   → Sheet + Reply
 ```
 
 13 Nodes, drei parallele Pfade die alle in dem gleichen Sheet-Append +
@@ -21,7 +21,7 @@ Telegram-Reply enden.
 
 1. **n8n** läuft (n8n.cloud, self-hosted Docker, Pi etc.)
 2. **Telegram Bot Token** vom [@BotFather](https://t.me/BotFather)
-3. **Anthropic API Key** von [console.anthropic.com](https://console.anthropic.com)
+3. **Gemini API Key** von [aistudio.google.com/apikey](https://aistudio.google.com/apikey) — kostenloses Free Tier reicht locker
 4. **Google Sheet** mit Tab `Log` und passenden Headern (siehe unten)
 5. **Google Account** für Sheets-OAuth in n8n
 
@@ -60,11 +60,11 @@ In n8n unter **Credentials → Add Credential**:
 - Access Token: Token vom BotFather
 - Speichern als z.B. "Telegram Bot"
 
-**b) Anthropic (HTTP Header Auth)**
+**b) Gemini (HTTP Header Auth)**
 - Type: `Header Auth`
-- Name: `x-api-key`
-- Value: Dein Anthropic API Key (`sk-ant-...`)
-- Speichern als z.B. "Anthropic API Key"
+- Name: `x-goog-api-key`
+- Value: Dein Gemini API Key (`AIza...`)
+- Speichern als z.B. "Gemini API Key"
 
 **c) Google Sheets**
 - Type: `Google Sheets OAuth2 API`
@@ -84,8 +84,8 @@ In n8n: **Workflows → Import from File →** `workflow.json` auswählen.
 | --------------------- | ----------------------- |
 | Telegram Trigger      | Telegram Bot            |
 | Telegram: Antworten   | Telegram Bot            |
-| Anthropic Vision      | Anthropic API Key       |
-| Anthropic Text        | Anthropic API Key       |
+| Gemini Vision         | Gemini API Key          |
+| Gemini Text           | Gemini API Key          |
 | Sheets: Append        | Google Sheets           |
 
 ### 5. Sheet-ID eintragen
@@ -105,11 +105,11 @@ sollte funktionieren.
 
 | Du schickst…                  | Was passiert                               |
 | ----------------------------- | ------------------------------------------ |
-| `2 Eier mit Toast und Butter` | Claude parst + schätzt + loggt             |
-| `Skyr Natur 200g`             | Claude erkennt Marke + Menge + loggt       |
-| `selbstgemachte Lasagne 350g` | Claude schätzt + loggt                     |
+| `2 Eier mit Toast und Butter` | Gemini parst + schätzt + loggt             |
+| `Skyr Natur 200g`             | Gemini erkennt Marke + Menge + loggt       |
+| `selbstgemachte Lasagne 350g` | Gemini schätzt + loggt                     |
 | `4008400123456` (EAN)         | Open Food Facts Lookup, 100g default       |
-| 📷 Foto vom Teller            | Claude Vision schätzt alle Items + loggt   |
+| 📷 Foto vom Teller            | Gemini Vision schätzt alle Items + loggt   |
 
 **Trade-offs gegenüber dem Python-Bot:**
 - Keine Bestätigungs-Buttons — wird direkt geloggt. Falsch geloggte Einträge
@@ -135,9 +135,10 @@ n8n automatisch bei Telegram registriert.
 Cloudflare Tunnel, ngrok oder echte Domain mit SSL). Sonst kann Telegram den
 Bot nicht erreichen.
 
-**HTTP 401 von Anthropic**
-→ API Key falsch eingetragen. In Credentials → "Anthropic API Key" → der
-Wert muss im Header `x-api-key` sitzen, ohne `Bearer ` davor.
+**HTTP 401/403 von Gemini**
+→ API Key falsch eingetragen. In Credentials → "Gemini API Key" → der
+Wert muss im Header `x-goog-api-key` sitzen, ohne `Bearer ` davor. Auch
+prüfen ob der Key im AI Studio nicht eingeschränkt ist.
 
 **Sheet nicht beschreibbar**
 → Beim ersten Append fragt Google evtl. nach erweiterten OAuth-Berechtigungen.
@@ -147,7 +148,7 @@ Re-authorize unter Credentials → Google Sheets.
 → Telegram Trigger Node muss "Download Files" auf `true` haben (ist im JSON
 schon gesetzt; prüf nach Import).
 
-**Claude-Antwort ist kein gültiges JSON**
+**Gemini-Antwort ist kein gültiges JSON**
 → Sehr selten. Im "Foto: Parse" / "Text: Parse" Node den Error Output
 aktivieren und schauen was zurückkommt.
 

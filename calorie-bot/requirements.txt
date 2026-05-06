@@ -1,6 +1,7 @@
 python-telegram-bot==21.7
-anthropic>=0.40.0
+google-genai>=0.3.0
 gspread>=6.1.4
 google-auth>=2.35.0
 requests>=2.32.0
 python-dotenv>=1.0.1
+pydantic>=2.0

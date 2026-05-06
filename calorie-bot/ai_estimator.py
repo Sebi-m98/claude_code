@@ -1,31 +1,31 @@
 """
-Claude-basierte Estimator-Funktionen.
+Gemini-basierte Estimator-Funktionen.
 
 - parse_text_meal(text): Beschreibung in Items + geschaetzte Naehrwerte
 - analyze_photo(jpeg_bytes): Foto -> Items + geschaetzte Naehrwerte
 """
 from __future__ import annotations
 
-import base64
 import logging
 from typing import List, Optional
 
-import anthropic
+from google import genai
+from google.genai import types
 from pydantic import BaseModel, Field
 
 import config
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-4-7"
+MODEL = "gemini-2.5-flash"
 
-_client: anthropic.Anthropic | None = None
+_client: genai.Client | None = None
 
 
-def _get_client() -> anthropic.Anthropic:
+def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        _client = genai.Client(api_key=config.GEMINI_API_KEY)
     return _client
 
 
@@ -75,77 +75,42 @@ Schaetze pro sichtbarem Lebensmittel:
 Sei realistisch, schaetze konservativ. Fuer Fotos KEIN search_query zurueckgeben - direkte Schaetzung."""
 
 
+def _generate(contents, system: str) -> ParsedMeal:
+    client = _get_client()
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type="application/json",
+            response_schema=ParsedMeal,
+        ),
+    )
+    parsed = response.parsed
+    if parsed is None:
+        raise ValueError(f"Gemini-Antwort konnte nicht geparsed werden: {response.text!r}")
+    return parsed
+
+
 def parse_text_meal(text: str) -> ParsedMeal:
     """Parse eine deutsche Mahlzeitenbeschreibung in strukturierte Items."""
-    client = _get_client()
-    response = client.messages.parse(
-        model=MODEL,
-        max_tokens=2048,
-        system=TEXT_SYSTEM,
-        messages=[{"role": "user", "content": f"Was ich gegessen habe: {text}"}],
-        output_format=ParsedMeal,
-    )
-    parsed = response.parsed_output
-    if parsed is None:
-        raise ValueError("Konnte Mahlzeit nicht parsen.")
-    return parsed
+    return _generate(f"Was ich gegessen habe: {text}", system=TEXT_SYSTEM)
 
 
 def analyze_photo(jpeg_bytes: bytes) -> ParsedMeal:
     """Analysiere ein Mahlzeit-Foto."""
-    client = _get_client()
-    image_data = base64.standard_b64encode(jpeg_bytes).decode("utf-8")
-
-    response = client.messages.parse(
-        model=MODEL,
-        max_tokens=2048,
-        system=PHOTO_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image_data,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Analysiere diese Mahlzeit und schaetze die Naehrwerte.",
-                    },
-                ],
-            }
+    return _generate(
+        contents=[
+            types.Part.from_bytes(data=jpeg_bytes, mime_type="image/jpeg"),
+            "Analysiere diese Mahlzeit und schaetze die Naehrwerte.",
         ],
-        output_format=ParsedMeal,
+        system=PHOTO_SYSTEM,
     )
-    parsed = response.parsed_output
-    if parsed is None:
-        raise ValueError("Konnte Foto nicht analysieren.")
-    return parsed
 
 
 def estimate_for_grams(name: str, grams: float) -> FoodItem:
-    """Schaetze Naehrwerte fuer ein einzelnes Item mit bekannter Menge.
-
-    Wird genutzt wenn der User z.B. einen Barcode + Gramm-Menge mit Custom-Beschreibung gibt.
-    """
-    client = _get_client()
-    response = client.messages.parse(
-        model=MODEL,
-        max_tokens=512,
-        system=TEXT_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": f"Schaetze die Naehrwerte fuer: {grams}g {name}",
-            }
-        ],
-        output_format=ParsedMeal,
-    )
-    parsed = response.parsed_output
-    if parsed is None or not parsed.items:
+    """Schaetze Naehrwerte fuer ein einzelnes Item mit bekannter Menge."""
+    parsed = _generate(f"Schaetze die Naehrwerte fuer: {grams}g {name}", system=TEXT_SYSTEM)
+    if not parsed.items:
         raise ValueError("Schaetzung fehlgeschlagen.")
     return parsed.items[0]
