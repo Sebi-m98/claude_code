@@ -1,5 +1,5 @@
 {
-  "name": "Toggl Monthly Hours → Email (Lite)",
+  "name": "Toggl — Monthly Invoicing Reminder",
   "nodes": [
     {
       "parameters": {
@@ -12,179 +12,281 @@
           ]
         }
       },
-      "id": "node-schedule",
-      "name": "Schedule (1st 09:00)",
+      "id": "trigger",
+      "name": "1. 09:00 Berlin",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [0, 0]
+    },
+    {
+      "parameters": {},
+      "id": "manual",
+      "name": "Manual Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 192]
     },
     {
       "parameters": {
-        "language": "javaScript",
-        "jsCode": "const now = new Date();\nconst y0 = now.getUTCFullYear();\nconst m0 = now.getUTCMonth();\nconst year  = m0 === 0 ? y0 - 1 : y0;\nconst month = m0 === 0 ? 12 : m0;\nconst start = new Date(Date.UTC(year, month - 1, 1));\nconst end   = new Date(Date.UTC(year, month, 0));\nconst fmt = (d) => d.toISOString().slice(0, 10);\nconst monthName = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][month - 1];\nreturn [{ json: {\n  start_date: fmt(start),\n  end_date:   fmt(end),\n  month_label: `${monthName} ${year}`,\n  month_iso:   `${year}-${String(month).padStart(2,'0')}`\n}}];\n"
+        "jsCode": "const now = new Date();\nconst y0 = now.getUTCFullYear();\nconst m0 = now.getUTCMonth();\nconst year  = m0 === 0 ? y0 - 1 : y0;\nconst month = m0 === 0 ? 12 : m0;\nconst start = new Date(Date.UTC(year, month - 1, 1));\nconst end   = new Date(Date.UTC(year, month, 0));\nconst fmt = (d) => d.toISOString().slice(0, 10);\nconst fmtDe = (d) => `${String(d.getUTCDate()).padStart(2,'0')}.${String(d.getUTCMonth()+1).padStart(2,'0')}.${d.getUTCFullYear()}`;\nconst monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];\nconst monthName = monthNames[month - 1];\nconst month_iso = `${year}-${String(month).padStart(2,'0')}`;\nconst start_date = fmt(start);\nconst end_date = fmt(end);\nconst HOURLY_RATE = 23.80;\nconst VAT_PERCENT = 19;\nconst toggl_body = JSON.stringify({\n  start_date, end_date,\n  order_by: 'date', order_dir: 'ASC',\n  page_size: 1000\n});\nconst toggl_pdf_body = JSON.stringify({\n  start_date, end_date,\n  order_by: 'date', order_dir: 'ASC',\n  display_mode: 'date_and_time',\n  duration_format: 'classic'\n});\nreturn [{ json: {\n  start_date, end_date,\n  start_de: fmtDe(start),\n  end_de: fmtDe(end),\n  year, month, month_name: monthName, month_iso,\n  filename: `Toggl-Report_${month_iso}.pdf`,\n  subject: `Toggl-Monatsreport Sebastian ${monthName} ${year}`,\n  hourly_rate: HOURLY_RATE,\n  vat_percent: VAT_PERCENT,\n  toggl_body,\n  toggl_pdf_body\n} }];"
       },
-      "id": "node-daterange",
-      "name": "Date Range (prev month)",
+      "id": "calc",
+      "name": "Calc Vormonat",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [224, 96]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://api.track.toggl.com/api/v9/me",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "options": {}
-      },
-      "id": "node-me",
-      "name": "Toggl: Get /me",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [680, 300],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "toggl-basic-auth",
-          "name": "Toggl Basic Auth"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {"id": "c1", "name": "to_email",    "value": "info@marxen-ecommerce.com", "type": "string"},
-            {"id": "c2", "name": "from_email",  "value": "info@marxen-ecommerce.com", "type": "string"},
-            {"id": "c3", "name": "hourly_rate", "value": 23.80, "type": "number"},
-            {"id": "c4", "name": "vat_percent", "value": 19,    "type": "number"}
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/21241503/search/time_entries",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic YWU0M2ExNzQ3MzgwZWFkOTFmNmNiNTIyZTYzNmRkZDU6YXBpX3Rva2Vu"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
-        "options": {}
-      },
-      "id": "node-config",
-      "name": "Config",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Toggl: Get /me').item.json.default_workspace_id }}/search/time_entries",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"page_size\": 1000\n}",
+        "jsonBody": "={{ $json.toggl_body }}",
         "options": {}
       },
-      "id": "node-toggl-entries",
-      "name": "Toggl: Get Time Entries",
+      "id": "togglJson",
+      "name": "Toggl JSON Report",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "toggl-basic-auth",
-          "name": "Toggl Basic Auth"
-        }
-      }
+      "position": [448, 96],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "language": "javaScript",
-        "jsCode": "const items = $input.all();\nlet totalSeconds = 0;\nfor (const item of items) {\n  const groups = Array.isArray(item.json) ? item.json : [item.json];\n  for (const group of groups) {\n    const entries = group.time_entries || [];\n    for (const e of entries) {\n      totalSeconds += Number(e.seconds || 0);\n    }\n  }\n}\nconst hours = Math.round((totalSeconds / 3600) * 100) / 100;\nconst rate  = Number($('Config').item.json.hourly_rate);\nconst vat   = Number($('Config').item.json.vat_percent);\nconst net   = Math.round(hours * rate * 100) / 100;\nconst vatAmount = Math.round(net * vat / 100 * 100) / 100;\nconst gross = Math.round((net + vatAmount) * 100) / 100;\n\nconst de = (n) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n\nif (hours <= 0) {\n  throw new Error('No tracked hours in this period.');\n}\n\nreturn [{ json: {\n  total_seconds: totalSeconds,\n  hours, net, gross, vat_amount: vatAmount,\n  hours_de: de(hours), rate_de: de(rate), net_de: de(net), vat_de: de(vatAmount), gross_de: de(gross),\n  vat_percent: vat,\n  month_label: $('Date Range (prev month)').item.json.month_label,\n  month_iso:   $('Date Range (prev month)').item.json.month_iso\n}}];\n"
+        "jsCode": "const meta = $('Calc Vormonat').first().json;\nconst list = $input.all().map(i => i.json);\n\nconst TAG_LOOKUP = {\n  20353637: 'Bundles',\n  20372675: 'Externer Traffic',\n  20316408: 'Flatfiles',\n  20281019: 'Monthly Tasks'\n};\n\nconst entries = [];\nlet totalSeconds = 0;\nfor (const grp of list) {\n  const tagNames = (grp.tag_ids || []).map(t => TAG_LOOKUP[t] || `tag_${t}`);\n  for (const te of (grp.time_entries || [])) {\n    const secs = te.seconds || 0;\n    totalSeconds += secs;\n    entries.push({\n      date: (te.start || '').slice(0, 10),\n      desc: grp.description || '(kein Titel)',\n      tags: tagNames,\n      duration_min: Math.round(secs / 60),\n      billable: !!grp.billable\n    });\n  }\n}\n\nconst totalH = (totalSeconds / 3600).toFixed(2);\nconst totalH_de = totalH.replace('.', ',');\n\nconst rate = meta.hourly_rate;\nconst vat  = meta.vat_percent;\nconst hours = parseFloat(totalH);\nconst net   = Math.round(hours * rate * 100) / 100;\nconst vatAmount = Math.round(net * vat / 100 * 100) / 100;\nconst gross = Math.round((net + vatAmount) * 100) / 100;\nconst de = (n) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n\nconst userPrompt = `${meta.month_name} ${meta.year} (${meta.start_date} bis ${meta.end_date}), Gesamt ${totalH_de} h.\\nEntries:\\n${JSON.stringify(entries)}`;\n\nconst systemPrompt = `Du bist Reporting-Assistent fuer einen Freelancer. Du fasst Monats-Stunden zusammen.\n\nEingabe: JSON-Array Time-Entries mit date, desc, tags, duration_min.\n\nOutput: Nur HTML-Snippet (kein Markdown, keine Code-Fences). Format:\n<p><strong>Gesamtstunden ${meta.month_name}:</strong> {X,X} h</p>\n<ul><li><strong>{Themenname}</strong> ({X,X} h) -- {Knappe Aufzaehlung}</li></ul>\n\nRegeln:\n- 4-7 Bullet Points, sortiert absteigend nach Stunden\n- Gruppiere nach inhaltlichem Thema (Tags + Beschreibungs-Cluster), NICHT nach Datum\n- Untagged Entries clustern (Calls & Abstimmung, Listing-Pflege, Pricing & Setup)\n- Themennamen praegnant max 4 Worte, Marktplatz-Kontext erlaubt (z.B. Bundles FR/IE)\n- Sachlich knapp, deutsch, neutral (kein Du/Sie)\n- Keine Floskeln\n- Stunden mit Komma (1,5 h), eine Stelle nach Komma\n- ASIN-Codes nur wenn inhaltlich relevant\n- Output: NUR HTML, nichts davor/danach`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 1000, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: {\n  ...meta,\n  total_hours: hours,\n  total_hours_de: totalH_de,\n  net, vat_amount: vatAmount, gross,\n  net_de: de(net), vat_de: de(vatAmount), gross_de: de(gross), rate_de: de(rate),\n  entry_count: entries.length,\n  has_entries: entries.length > 0,\n  gemini_body: geminiBody,\n  fallback_html: entries.length === 0 ? `<p><em>Keine Time-Entries in ${meta.month_name} ${meta.year} getrackt.</em></p>` : ''\n} }];"
       },
-      "id": "node-sum",
-      "name": "Sum Hours",
+      "id": "buildGemini",
+      "name": "Build Gemini Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [672, 96]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Toggl: Get /me').item.json.default_workspace_id }}/search/time_entries.pdf",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyDfFHLoW4o9bIbV8Y9M7rSmY_SRY1rWCzc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"date_format\": \"DD.MM.YYYY\",\n  \"duration_format\": \"improved\",\n  \"display_mode\": \"date_and_time\"\n}",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {}
+      },
+      "id": "gemini",
+      "name": "Gemini Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [896, 96],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/21241503/search/time_entries.pdf",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic YWU0M2ExNzQ3MzgwZWFkOTFmNmNiNTIyZTYzNmRkZDU6YXBpX3Rva2Vu"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Calc Vormonat').first().json.toggl_pdf_body }}",
         "options": {
           "response": {
             "response": {
-              "responseFormat": "file",
-              "outputPropertyName": "data"
+              "responseFormat": "file"
             }
           }
         }
       },
-      "id": "node-toggl-pdf",
-      "name": "Toggl: Get Detailed PDF",
+      "id": "togglPdf",
+      "name": "Toggl Detailed PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 300],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "toggl-basic-auth",
-          "name": "Toggl Basic Auth"
-        }
-      }
+      "position": [1120, 96],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "fromEmail": "={{ $('Config').item.json.from_email }}",
-        "toEmail":   "={{ $('Config').item.json.to_email }}",
-        "subject":   "=Toggl-Stunden {{ $('Sum Hours').item.json.month_label }}: {{ $('Sum Hours').item.json.hours_de }} h ({{ $('Sum Hours').item.json.net_de }} € netto)",
-        "emailFormat": "text",
-        "text": "=Hallo,\n\nToggl-Übersicht für {{ $('Sum Hours').item.json.month_label }}:\n\n  Stunden:      {{ $('Sum Hours').item.json.hours_de }} h\n  Stundensatz:  {{ $('Sum Hours').item.json.rate_de }} € / h\n  --------------------------\n  Netto:        {{ $('Sum Hours').item.json.net_de }} €\n  USt {{ $('Sum Hours').item.json.vat_percent }} %:     {{ $('Sum Hours').item.json.vat_de }} €\n  Brutto:       {{ $('Sum Hours').item.json.gross_de }} €\n\nDetailreport als PDF im Anhang.\n\n→ Jetzt in easybill als Rechnung anlegen.\n",
+        "jsCode": "const meta = $('Calc Vormonat').first().json;\nconst togglMeta = $('Build Gemini Input').first().json;\nconst geminiResp = $('Gemini Summary').first().json;\n\nlet summaryHtml = togglMeta.fallback_html || '';\nif (!summaryHtml) {\n  try {\n    summaryHtml = geminiResp.candidates[0].content.parts[0].text.trim();\n    summaryHtml = summaryHtml.replace(/^```html\\s*/i, '').replace(/\\s*```$/, '').trim();\n  } catch (e) {\n    summaryHtml = `<p><em>(KI-Zusammenfassung konnte nicht generiert werden: ${String((e && e.message) || e)})</em></p>`;\n  }\n}\n\nconst subject = `${meta.subject}: ${togglMeta.total_hours_de} h (${togglMeta.gross_de} € brutto)`;\n\nconst htmlMessage = `<p>Hey,</p>\n<p>Monatsreport ${meta.month_name} ${meta.year} ist fertig — Zeit für die easybill-Rechnung.</p>\n${summaryHtml}\n<p><strong>Rechnungsbetrag</strong></p>\n<ul>\n  <li>Stunden: ${togglMeta.total_hours_de} h</li>\n  <li>Stundensatz: ${togglMeta.rate_de} € / h netto</li>\n  <li>Netto: ${togglMeta.net_de} €</li>\n  <li>USt ${meta.vat_percent} %: ${togglMeta.vat_de} €</li>\n  <li><strong>Brutto: ${togglMeta.gross_de} €</strong></li>\n</ul>\n<p>Detailreport als PDF im Anhang. → easybill öffnen, Rechnung tippen, Toggl-PDF mit anhängen.</p>\n<p>Lieben Gruß,<br>Sebastian</p>`;\n\nconst item = $input.first();\nif (item.binary && item.binary.data) {\n  item.binary.data.fileName = meta.filename;\n  item.binary.data.mimeType = 'application/pdf';\n}\nitem.json = {\n  ...meta,\n  subject,\n  htmlMessage,\n  total_hours_de: togglMeta.total_hours_de,\n  net_de: togglMeta.net_de,\n  gross_de: togglMeta.gross_de,\n  entry_count: togglMeta.entry_count\n};\nreturn [item];"
+      },
+      "id": "buildMail",
+      "name": "Build Mail Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1344, 96]
+    },
+    {
+      "parameters": {
+        "sendTo": "info@marxen-ecommerce.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.htmlMessage }}",
         "options": {
-          "attachments": "data"
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
         }
       },
-      "id": "node-email",
+      "id": "gmail",
       "name": "Send Email",
-      "type": "n8n-nodes-base.emailSend",
+      "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [1780, 300],
+      "position": [1568, 96],
+      "webhookId": "9b2b8a4e-1f3c-4d5e-8b7a-2c9e5d6f7a8b",
       "credentials": {
-        "smtp": {
-          "id": "smtp-credential",
-          "name": "SMTP"
+        "gmailOAuth2": {
+          "id": "WtFeeKnwbYaizTR1",
+          "name": "Gmail account"
         }
       }
     }
   ],
+  "pinData": {
+    "Manual Test": [
+      {
+        "json": {},
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
   "connections": {
-    "Schedule (1st 09:00)": {
-      "main": [[{"node": "Date Range (prev month)", "type": "main", "index": 0}]]
+    "1. 09:00 Berlin": {
+      "main": [
+        [
+          {
+            "node": "Calc Vormonat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Date Range (prev month)": {
-      "main": [[{"node": "Toggl: Get /me", "type": "main", "index": 0}]]
+    "Manual Test": {
+      "main": [
+        [
+          {
+            "node": "Calc Vormonat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Toggl: Get /me": {
-      "main": [[{"node": "Config", "type": "main", "index": 0}]]
+    "Calc Vormonat": {
+      "main": [
+        [
+          {
+            "node": "Toggl JSON Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Config": {
-      "main": [[{"node": "Toggl: Get Time Entries", "type": "main", "index": 0}]]
+    "Toggl JSON Report": {
+      "main": [
+        [
+          {
+            "node": "Build Gemini Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Toggl: Get Time Entries": {
-      "main": [[{"node": "Sum Hours", "type": "main", "index": 0}]]
+    "Build Gemini Input": {
+      "main": [
+        [
+          {
+            "node": "Gemini Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Sum Hours": {
-      "main": [[{"node": "Toggl: Get Detailed PDF", "type": "main", "index": 0}]]
+    "Gemini Summary": {
+      "main": [
+        [
+          {
+            "node": "Toggl Detailed PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Toggl: Get Detailed PDF": {
-      "main": [[{"node": "Send Email", "type": "main", "index": 0}]]
+    "Toggl Detailed PDF": {
+      "main": [
+        [
+          {
+            "node": "Build Mail Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Mail Body": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
-    "executionOrder": "v1"
-  },
-  "active": false,
-  "pinData": {},
-  "meta": {
-    "instanceId": "import"
+    "executionOrder": "v1",
+    "timezone": "Europe/Berlin",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
   "tags": []
 }

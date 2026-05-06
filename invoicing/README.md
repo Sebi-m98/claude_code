@@ -4,7 +4,7 @@ Drei Varianten — je nachdem was du brauchst:
 
 | Variante | Datei | Was sie macht | Voraussetzung |
 |---|---|---|---|
-| **Lite (empfohlen für 1 Rechnung/Monat)** | `n8n-workflow-lite.json` | Holt Toggl-Stunden + PDF, schickt dir am 1. eine Mail mit Stunden, Netto/Brutto + PDF im Anhang. Rechnung tippst du manuell in easybill. | n8n + Toggl-Token + SMTP |
+| **Lite (empfohlen für 1 Rechnung/Monat)** | `n8n-workflow-lite.json` | Holt am 1. die Toggl-Stunden des Vormonats, lässt Gemini eine Themen-Zusammenfassung machen, schickt dir Mail mit Stunden, Netto/Brutto, KI-Summary + Toggl-PDF. Rechnung tippst du manuell in easybill. | n8n + Gmail OAuth |
 | **Full (n8n)** | `n8n-workflow.json` | Wie Lite + legt zusätzlich Draft-Rechnung in easybill an, hängt PDF dran. Du klickst nur noch „senden" in easybill. | n8n + Toggl + **easybill PROFESSIONAL** (API ab 21 €/Monat) |
 | **Full (Python-CLI)** | `invoice.py` | Wie Full, aber lokal als Python-Skript. | Python + Toggl + easybill PROFESSIONAL |
 
@@ -12,53 +12,35 @@ Drei Varianten — je nachdem was du brauchst:
 
 ## Lite-Workflow (`n8n-workflow-lite.json`)
 
-Schickt dir am 1. um 09:00 eine Mail mit Toggl-Übersicht für den Vormonat. Kein easybill-API nötig — kostet 0 € extra.
+Identisch aufgebaut wie dein bestehender Wochen-Workflow — gleiche Inline-Auth (Toggl-Token + Gemini-Key direkt im Workflow), gleicher Stil, reuses deine Gmail-OAuth-Credential **„Gmail account"**.
 
-### 1. Credential in n8n: „Toggl Basic Auth"
+### Setup
 
-n8n → **Credentials** → **+ Add Credential** → **Basic Auth** (Generic):
-- Name: `Toggl Basic Auth` (exakt so)
-- Username: dein Toggl-API-Token (https://track.toggl.com/profile, ganz unten)
-- Password: `api_token` (genau das wörtlich, kein Platzhalter)
+1. **Importieren**: n8n → **Workflows** → **+** → **Import from File** → `n8n-workflow-lite.json`.
+2. **Gmail-Credential prüfen**: Der Send-Email-Node referenziert `Gmail account` (id `WtFeeKnwbYaizTR1`) — wenn n8n nach dem Import meckert, im Send-Email-Node deine Gmail-Credential erneut auswählen.
+3. **Empfänger anpassen** (optional): im Node **Send Email** ist `sendTo` standardmäßig `info@marxen-ecommerce.com`. Falls Mail wo anders hin soll: dort ändern.
+4. **Konfiguration anpassen** (optional): Stundensatz / USt stehen im Node **Calc Vormonat** als `HOURLY_RATE` und `VAT_PERCENT`. Workspace `21241503` und Toggl-Token sind hardcoded (gleicher Token wie Wochen-Flow).
 
-### 2. Credential in n8n: „SMTP"
+### Test + aktivieren
 
-n8n → **Credentials** → **+ Add Credential** → **SMTP**:
-- Name: `SMTP` (exakt so)
-- Host / Port / User / Password / SSL: laut deinem E-Mail-Anbieter (Gmail, Strato, IONOS, etc.)
-  - **Gmail**: `smtp.gmail.com`, Port 465, SSL=true, App-Passwort statt normales PW
-  - **IONOS**: `smtp.ionos.de`, Port 465, SSL=true
-  - Bei deinem eigenen Hoster: dort nachschauen
-
-### 3. Workflow importieren
-
-n8n → **Workflows** → **+** → **Import from File** → `n8n-workflow-lite.json`.
-
-### 4. Mail-Adresse anpassen
-
-Im Node **„Config"**:
-- `to_email` → wo soll die Mail hin? (Default: `info@marxen-ecommerce.com`)
-- `from_email` → muss zur SMTP-Credential passen
-- `hourly_rate`, `vat_percent` → falls sich was ändert
-
-Workspace-ID musst du *nicht* eintragen — der Workflow holt sie automatisch über `/me`.
-
-### 5. Test + aktivieren
-
-- **„Execute Workflow"** klicken → läuft sofort durch, Mail kommt an.
-- Bei Erfolg: Toggle oben rechts auf **Active** → läuft jeden 1. um 09:00.
+- Node **Manual Test** anklicken → **„Execute Workflow"** → läuft sofort durch, Mail kommt an.
+- Bei Erfolg: Toggle oben rechts auf **Active** → läuft jeden 1. um 09:00 Berlin-Zeit.
 
 ### Was passiert
 ```
-Schedule (1. 09:00)
-  → Date Range (Vormonat berechnen)
-  → Toggl /me (workspace_id automatisch holen)
-  → Config (Stundensatz, Mail-Adresse)
-  → Toggl: Time Entries
-  → Sum Hours (Stunden, netto, brutto)
-  → Toggl: Detailed PDF
-  → Send Email (mit PDF angehängt)
+1. 09:00 Berlin   ┐
+                  ├─→ Calc Vormonat → Toggl JSON Report → Build Gemini Input
+Manual Test       ┘                                              │
+                                                                 ↓
+                  Toggl Detailed PDF ←── Gemini Summary ─────────┘
+                          │
+                          ↓
+                  Build Mail Body → Send Email (Gmail)
 ```
+
+### Token-Rotation
+
+Toggl-Token ist im Workflow-JSON Base64-codiert im `Authorization`-Header (`Basic <base64(token:api_token)>`) — gleicher Mechanismus wie Wochen-Flow. Wenn du den Token bei Toggl resettest, in **beiden** Workflows den Header-Wert tauschen (Toggl JSON Report + Toggl Detailed PDF).
 
 ---
 
