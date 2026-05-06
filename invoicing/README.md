@@ -2,7 +2,74 @@
 
 Erzeugt am Monatsanfang einen **Entwurf** in easybill auf Basis der Toggl-Stunden des Vormonats und hängt den Toggl-Detailreport als PDF an. Versand bleibt manuell in easybill (du klickst „senden" im Draft).
 
-## Setup
+Zwei Wege:
+- **A) n8n-Workflow** (`n8n-workflow.json`) — empfohlen wenn du n8n eh laufen hast. [Anleitung](#a-n8n-workflow)
+- **B) Python-CLI** — wenn du es lokal/per cron laufen lassen willst. [Anleitung](#b-python-cli)
+
+---
+
+## A) n8n-Workflow
+
+Der Workflow `n8n-workflow.json` macht genau das gleiche wie das Python-Skript: Stunden aus Toggl ziehen, Draft in easybill anlegen, Toggl-PDF dranhängen.
+
+### 1. Credentials in n8n anlegen
+
+n8n öffnen → links **Credentials** → **+ Add Credential**:
+
+**Credential 1: „Toggl Basic Auth"**
+- Typ: **Basic Auth** (Generic)
+- Name: `Toggl Basic Auth` (exakt so, sonst findet der Workflow sie nicht)
+- Username: dein Toggl-API-Token (https://track.toggl.com/profile, ganz unten)
+- Password: `api_token` (genau das wörtlich, kein Platzhalter)
+
+**Credential 2: „easybill Bearer"**
+- Typ: **Header Auth** (Generic)
+- Name: `easybill Bearer` (exakt so)
+- Header-Name: `Authorization`
+- Header-Wert: `Bearer DEIN_EASYBILL_API_KEY` (das Wort „Bearer", Leerzeichen, dann der Key)
+
+### 2. Workflow importieren
+
+n8n → **Workflows** → **+** → **Import from File** → `n8n-workflow.json` auswählen.
+
+### 3. Workspace-ID setzen
+
+Im importierten Workflow den Node **„Config"** öffnen und bei `workspace_id` deine Toggl-Workspace-ID eintragen (zu finden in der Toggl-Web-URL nach Login: `…/workspaces/<DIE_ZAHL>/…`).
+
+Falls du andere Werte brauchst (Kundennummer, Stundensatz, USt %, Beschreibung), auch hier ändern — alle Defaults stehen im Config-Node.
+
+### 4. Test
+
+- **„Execute Workflow"** klicken → läuft sofort durch (für den letzten abgeschlossenen Monat).
+- Bei Erfolg: Draft erscheint in easybill mit angehängter Toggl-PDF.
+
+### 5. Aktivieren
+
+Wenn der Test sauber war: oben rechts den Toggle auf **Active** stellen → läuft automatisch jeden 1. um 09:00.
+
+### Was der Workflow macht
+
+```
+Schedule (1. 09:00)
+  → Config (Stundensatz, Kundennr, USt, Workspace-ID)
+  → Date Range (Vormonat berechnen)
+  → Toggl: Get Time Entries (Stunden ziehen)
+  → Sum Hours (aufsummieren, netto/brutto rechnen)
+  → Toggl: Get Detailed PDF (Bericht als PDF runterladen)
+  → easybill: Find Customer (Kunde per Nummer suchen)
+  → Pick Customer ID (interne ID extrahieren)
+  → easybill: Create Draft Invoice (Entwurf anlegen)
+  → easybill: Upload Toggl PDF (PDF hochladen)
+  → easybill: Link Attachment (PDF an den Entwurf hängen)
+```
+
+Versand bleibt manuell — du gehst in easybill, prüfst den Entwurf, klickst senden.
+
+---
+
+## B) Python-CLI
+
+### Setup
 
 ```bash
 cd invoicing
