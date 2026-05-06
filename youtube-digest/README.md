@@ -37,6 +37,7 @@ So liegt kein Klartext-Secret im Workflow-JSON.
 | 1 | `Get a playlist`-Node hing als toter Ast an `Get Playlist Items` (kein Output verbunden). | Node entfernt, Connection bereinigt. |
 | 2 | `Parse Transcript` und `Parse Gemini Response` mappten Antworten **per Index** zurück auf die Quell-Items. Bei `onError: continueRegularOutput` + Retries kann das auseinanderlaufen. | Auf `itemMatching($itemIndex)` umgestellt mit Index-Fallback. |
 | 3 | Apify-Token + Gemini-Key im Klartext im Workflow-Export. | Durch Platzhalter ersetzt; README dokumentiert Credential-Variante. |
+| 4 | `Apify Transcript` und `Gemini Key Points` (HTTP Request) waren auf `typeVersion 4.4` exportiert — auf älteren n8n-Versionen erscheinen sie als "Install this node to use it" und Connections gehen verloren. | Auf `typeVersion 4.2` gesenkt (stable seit n8n 1.30). Falls die Instanz noch älter ist: weiter auf `4.1`. |
 
 ## Bekannte Schwachstellen (nicht gefixt — Designentscheidung)
 
