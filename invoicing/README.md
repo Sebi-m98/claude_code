@@ -1,28 +1,78 @@
 # Invoicing — Toggl → easybill
 
-Erzeugt am Monatsanfang einen **Entwurf** in easybill auf Basis der Toggl-Stunden des Vormonats und hängt den Toggl-Detailreport als PDF an. Versand bleibt manuell in easybill (du klickst „senden" im Draft).
+Drei Varianten — je nachdem was du brauchst:
 
-Zwei Wege:
-- **A) n8n-Workflow** (`n8n-workflow.json`) — empfohlen wenn du n8n eh laufen hast. [Anleitung](#a-n8n-workflow)
-- **B) Python-CLI** — wenn du es lokal/per cron laufen lassen willst. [Anleitung](#b-python-cli)
+| Variante | Datei | Was sie macht | Voraussetzung |
+|---|---|---|---|
+| **Lite (empfohlen für 1 Rechnung/Monat)** | `n8n-workflow-lite.json` | Holt Toggl-Stunden + PDF, schickt dir am 1. eine Mail mit Stunden, Netto/Brutto + PDF im Anhang. Rechnung tippst du manuell in easybill. | n8n + Toggl-Token + SMTP |
+| **Full (n8n)** | `n8n-workflow.json` | Wie Lite + legt zusätzlich Draft-Rechnung in easybill an, hängt PDF dran. Du klickst nur noch „senden" in easybill. | n8n + Toggl + **easybill PROFESSIONAL** (API ab 21 €/Monat) |
+| **Full (Python-CLI)** | `invoice.py` | Wie Full, aber lokal als Python-Skript. | Python + Toggl + easybill PROFESSIONAL |
 
 ---
 
-## A) n8n-Workflow
+## Lite-Workflow (`n8n-workflow-lite.json`)
 
-Der Workflow `n8n-workflow.json` macht genau das gleiche wie das Python-Skript: Stunden aus Toggl ziehen, Draft in easybill anlegen, Toggl-PDF dranhängen.
+Schickt dir am 1. um 09:00 eine Mail mit Toggl-Übersicht für den Vormonat. Kein easybill-API nötig — kostet 0 € extra.
 
-### 1. Credentials in n8n anlegen
+### 1. Credential in n8n: „Toggl Basic Auth"
 
-n8n öffnen → links **Credentials** → **+ Add Credential**:
-
-**Credential 1: „Toggl Basic Auth"**
-- Typ: **Basic Auth** (Generic)
-- Name: `Toggl Basic Auth` (exakt so, sonst findet der Workflow sie nicht)
+n8n → **Credentials** → **+ Add Credential** → **Basic Auth** (Generic):
+- Name: `Toggl Basic Auth` (exakt so)
 - Username: dein Toggl-API-Token (https://track.toggl.com/profile, ganz unten)
 - Password: `api_token` (genau das wörtlich, kein Platzhalter)
 
-**Credential 2: „easybill Bearer"**
+### 2. Credential in n8n: „SMTP"
+
+n8n → **Credentials** → **+ Add Credential** → **SMTP**:
+- Name: `SMTP` (exakt so)
+- Host / Port / User / Password / SSL: laut deinem E-Mail-Anbieter (Gmail, Strato, IONOS, etc.)
+  - **Gmail**: `smtp.gmail.com`, Port 465, SSL=true, App-Passwort statt normales PW
+  - **IONOS**: `smtp.ionos.de`, Port 465, SSL=true
+  - Bei deinem eigenen Hoster: dort nachschauen
+
+### 3. Workflow importieren
+
+n8n → **Workflows** → **+** → **Import from File** → `n8n-workflow-lite.json`.
+
+### 4. Mail-Adresse anpassen
+
+Im Node **„Config"**:
+- `to_email` → wo soll die Mail hin? (Default: `info@marxen-ecommerce.com`)
+- `from_email` → muss zur SMTP-Credential passen
+- `hourly_rate`, `vat_percent` → falls sich was ändert
+
+Workspace-ID musst du *nicht* eintragen — der Workflow holt sie automatisch über `/me`.
+
+### 5. Test + aktivieren
+
+- **„Execute Workflow"** klicken → läuft sofort durch, Mail kommt an.
+- Bei Erfolg: Toggle oben rechts auf **Active** → läuft jeden 1. um 09:00.
+
+### Was passiert
+```
+Schedule (1. 09:00)
+  → Date Range (Vormonat berechnen)
+  → Toggl /me (workspace_id automatisch holen)
+  → Config (Stundensatz, Mail-Adresse)
+  → Toggl: Time Entries
+  → Sum Hours (Stunden, netto, brutto)
+  → Toggl: Detailed PDF
+  → Send Email (mit PDF angehängt)
+```
+
+---
+
+## Full-Workflow (`n8n-workflow.json`)
+
+> Braucht **easybill PROFESSIONAL** (21 €/Monat) wegen REST-API-Zugang.
+
+Macht das gleiche wie der Lite-Workflow plus: legt automatisch einen Draft in easybill an und hängt das Toggl-PDF dort an. Du gehst in easybill, prüfst, klickst senden.
+
+### 1. Credentials in n8n anlegen
+
+Falls noch nicht vom Lite-Workflow vorhanden, „Toggl Basic Auth" wie [oben beschrieben](#1-credential-in-n8n-toggl-basic-auth) anlegen. Zusätzlich:
+
+**Credential: „easybill Bearer"**
 - Typ: **Header Auth** (Generic)
 - Name: `easybill Bearer` (exakt so)
 - Header-Name: `Authorization`

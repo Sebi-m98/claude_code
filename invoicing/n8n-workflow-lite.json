@@ -1,0 +1,190 @@
+{
+  "name": "Toggl Monthly Hours → Email (Lite)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Schedule (1st 09:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const now = new Date();\nconst y0 = now.getUTCFullYear();\nconst m0 = now.getUTCMonth();\nconst year  = m0 === 0 ? y0 - 1 : y0;\nconst month = m0 === 0 ? 12 : m0;\nconst start = new Date(Date.UTC(year, month - 1, 1));\nconst end   = new Date(Date.UTC(year, month, 0));\nconst fmt = (d) => d.toISOString().slice(0, 10);\nconst monthName = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][month - 1];\nreturn [{ json: {\n  start_date: fmt(start),\n  end_date:   fmt(end),\n  month_label: `${monthName} ${year}`,\n  month_iso:   `${year}-${String(month).padStart(2,'0')}`\n}}];\n"
+      },
+      "id": "node-daterange",
+      "name": "Date Range (prev month)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.track.toggl.com/api/v9/me",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "node-me",
+      "name": "Toggl: Get /me",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "toggl-basic-auth",
+          "name": "Toggl Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {"id": "c1", "name": "to_email",    "value": "info@marxen-ecommerce.com", "type": "string"},
+            {"id": "c2", "name": "from_email",  "value": "info@marxen-ecommerce.com", "type": "string"},
+            {"id": "c3", "name": "hourly_rate", "value": 23.80, "type": "number"},
+            {"id": "c4", "name": "vat_percent", "value": 19,    "type": "number"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Toggl: Get /me').item.json.default_workspace_id }}/search/time_entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"page_size\": 1000\n}",
+        "options": {}
+      },
+      "id": "node-toggl-entries",
+      "name": "Toggl: Get Time Entries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "toggl-basic-auth",
+          "name": "Toggl Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const items = $input.all();\nlet totalSeconds = 0;\nfor (const item of items) {\n  const groups = Array.isArray(item.json) ? item.json : [item.json];\n  for (const group of groups) {\n    const entries = group.time_entries || [];\n    for (const e of entries) {\n      totalSeconds += Number(e.seconds || 0);\n    }\n  }\n}\nconst hours = Math.round((totalSeconds / 3600) * 100) / 100;\nconst rate  = Number($('Config').item.json.hourly_rate);\nconst vat   = Number($('Config').item.json.vat_percent);\nconst net   = Math.round(hours * rate * 100) / 100;\nconst vatAmount = Math.round(net * vat / 100 * 100) / 100;\nconst gross = Math.round((net + vatAmount) * 100) / 100;\n\nconst de = (n) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\n\nif (hours <= 0) {\n  throw new Error('No tracked hours in this period.');\n}\n\nreturn [{ json: {\n  total_seconds: totalSeconds,\n  hours, net, gross, vat_amount: vatAmount,\n  hours_de: de(hours), rate_de: de(rate), net_de: de(net), vat_de: de(vatAmount), gross_de: de(gross),\n  vat_percent: vat,\n  month_label: $('Date Range (prev month)').item.json.month_label,\n  month_iso:   $('Date Range (prev month)').item.json.month_iso\n}}];\n"
+      },
+      "id": "node-sum",
+      "name": "Sum Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Toggl: Get /me').item.json.default_workspace_id }}/search/time_entries.pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"date_format\": \"DD.MM.YYYY\",\n  \"duration_format\": \"improved\",\n  \"display_mode\": \"date_and_time\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "node-toggl-pdf",
+      "name": "Toggl: Get Detailed PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "toggl-basic-auth",
+          "name": "Toggl Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').item.json.from_email }}",
+        "toEmail":   "={{ $('Config').item.json.to_email }}",
+        "subject":   "=Toggl-Stunden {{ $('Sum Hours').item.json.month_label }}: {{ $('Sum Hours').item.json.hours_de }} h ({{ $('Sum Hours').item.json.net_de }} € netto)",
+        "emailFormat": "text",
+        "text": "=Hallo,\n\nToggl-Übersicht für {{ $('Sum Hours').item.json.month_label }}:\n\n  Stunden:      {{ $('Sum Hours').item.json.hours_de }} h\n  Stundensatz:  {{ $('Sum Hours').item.json.rate_de }} € / h\n  --------------------------\n  Netto:        {{ $('Sum Hours').item.json.net_de }} €\n  USt {{ $('Sum Hours').item.json.vat_percent }} %:     {{ $('Sum Hours').item.json.vat_de }} €\n  Brutto:       {{ $('Sum Hours').item.json.gross_de }} €\n\nDetailreport als PDF im Anhang.\n\n→ Jetzt in easybill als Rechnung anlegen.\n",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "id": "node-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1780, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credential",
+          "name": "SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule (1st 09:00)": {
+      "main": [[{"node": "Date Range (prev month)", "type": "main", "index": 0}]]
+    },
+    "Date Range (prev month)": {
+      "main": [[{"node": "Toggl: Get /me", "type": "main", "index": 0}]]
+    },
+    "Toggl: Get /me": {
+      "main": [[{"node": "Config", "type": "main", "index": 0}]]
+    },
+    "Config": {
+      "main": [[{"node": "Toggl: Get Time Entries", "type": "main", "index": 0}]]
+    },
+    "Toggl: Get Time Entries": {
+      "main": [[{"node": "Sum Hours", "type": "main", "index": 0}]]
+    },
+    "Sum Hours": {
+      "main": [[{"node": "Toggl: Get Detailed PDF", "type": "main", "index": 0}]]
+    },
+    "Toggl: Get Detailed PDF": {
+      "main": [[{"node": "Send Email", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "instanceId": "import"
+  },
+  "tags": []
+}
