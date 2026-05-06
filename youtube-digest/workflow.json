@@ -373,6 +373,14 @@
           },
           "schema": [
             { "id": "video_id", "displayName": "video_id", "type": "string", "canBeUsedToMatch": true, "required": true },
+            { "id": "title", "displayName": "title", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "channel", "displayName": "channel", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "url", "displayName": "url", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "published_at", "displayName": "published_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "added_to_playlist_at", "displayName": "added_to_playlist_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
             { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false }
           ]
         },

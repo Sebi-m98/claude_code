@@ -39,6 +39,7 @@ So liegt kein Klartext-Secret im Workflow-JSON.
 | 3 | Apify-Token + Gemini-Key im Klartext im Workflow-Export. | Durch Platzhalter ersetzt; README dokumentiert Credential-Variante. |
 | 4 | `Apify Transcript` und `Gemini Key Points` (HTTP Request) waren auf `typeVersion 4.4` exportiert — auf älteren n8n-Versionen erscheinen sie als "Install this node to use it" und Connections gehen verloren. | Auf `typeVersion 4.2` gesenkt (stable seit n8n 1.30). Falls die Instanz noch älter ist: weiter auf `4.1`. |
 | 5 | `Get Sheet Existing` lieferte beim leeren State-Sheet (Initial-Run) 0 Items — n8n stoppt den Workflow per Default. | `alwaysOutputData: true` gesetzt; `Cache Existing IDs` und `Filter New` sind bereits robust gegen leere Inputs. |
+| 6 | `Mark Sent` warf `Column names were updated after the node's setup`, weil sein Schema nur `video_id` + `summary_sent_at` kannte, das Sheet aber von `Append OK` schon mit allen 10 Spalten befüllt war. | Schema im `Mark Sent` auf alle 10 Sheet-Spalten erweitert; `value`-Mapping bleibt auf den zwei Spalten (Rest unverändert beim Update). |
 
 ## Bekannte Schwachstellen (nicht gefixt — Designentscheidung)
 
