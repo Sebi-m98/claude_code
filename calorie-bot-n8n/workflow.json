@@ -1,0 +1,364 @@
+{
+  "name": "Telegram Calorie Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {
+          "download": true
+        }
+      },
+      "id": "node-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 460],
+      "webhookId": "calorie-bot-telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE-TELEGRAM-CRED",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "is-photo",
+                    "leftValue": "={{ Boolean($json.message.photo) }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Foto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "is-barcode",
+                    "leftValue": "={{ ($json.message.text || '').trim() }}",
+                    "rightValue": "^\\d{8,14}$",
+                    "operator": {
+                      "type": "string",
+                      "operation": "regex"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Barcode"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Text"
+        }
+      },
+      "id": "node-switch",
+      "name": "Was ist es?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [460, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Anthropic Vision Request bauen aus Telegram-Foto\nconst item = $input.first();\nconst binaryKey = Object.keys(item.binary || {})[0];\nif (!binaryKey) {\n  throw new Error('Kein Foto im Telegram-Update gefunden.');\n}\nconst bin = item.binary[binaryKey];\nconst chatId = item.json.message.chat.id;\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],\n        additionalProperties: false\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary'],\n  additionalProperties: false\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      model: 'claude-opus-4-7',\n      max_tokens: 2048,\n      system: 'Du analysierst Fotos von Mahlzeiten fuer einen Kalorientracking-Bot. Schaetze pro sichtbarem Lebensmittel: Name und Portionsgroesse in Gramm (anhand visueller Hinweise wie Tellergroesse, Besteck), und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Sei realistisch und konservativ. Antworte auf Deutsch.',\n      messages: [{\n        role: 'user',\n        content: [\n          {\n            type: 'image',\n            source: {\n              type: 'base64',\n              media_type: bin.mimeType || 'image/jpeg',\n              data: bin.data\n            }\n          },\n          { type: 'text', text: 'Analysiere diese Mahlzeit.' }\n        ]\n      }],\n      output_config: { format: { type: 'json_schema', schema } }\n    }\n  }\n}];"
+      },
+      "id": "node-photo-build",
+      "name": "Foto: Body bauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "node-photo-anthropic",
+      "name": "Anthropic Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE-ANTHROPIC-CRED",
+          "name": "Anthropic API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Anthropic Antwort parsen, Reply + Rows bauen\nconst chatId = $('Foto: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst textBlock = (resp.content || []).find(b => b.type === 'text');\nif (!textBlock) {\n  throw new Error('Keine Text-Antwort von Claude.');\n}\nconst parsed = JSON.parse(textBlock.text);\n\nconst now = new Date();\nconst pad = n => String(n).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Foto',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📷 <b>Erkannt & geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
+      },
+      "id": "node-photo-parse",
+      "name": "Foto: Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://world.openfoodfacts.org/api/v2/product/{{ $json.message.text.trim() }}.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "code,product_name,product_name_de,brands,nutriments"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "telegram-calorie-bot-n8n/1.0"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-off-lookup",
+      "name": "OFF Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// OFF Antwort verarbeiten, default 100g loggen\nconst trigger = $('Telegram Trigger').first().json;\nconst chatId = trigger.message.chat.id;\nconst ean = (trigger.message.text || '').trim();\nconst data = $input.first().json;\n\nif (data.status !== 1 || !data.product) {\n  return [{ json: {\n    chatId,\n    rows: [],\n    replyText: `📦 EAN <code>${ean}</code> nicht in Open Food Facts gefunden.\\nSchick mir stattdessen eine Beschreibung (z.B. <i>'Skyr Natur 200g'</i>).`\n  }}];\n}\n\nconst p = data.product;\nconst n = p.nutriments || {};\nlet kcal100 = n['energy-kcal_100g'];\nif (kcal100 == null) {\n  const kj = n.energy_100g || n['energy-kj_100g'];\n  if (kj != null) kcal100 = kj / 4.184;\n}\nif (kcal100 == null) {\n  return [{ json: {\n    chatId,\n    rows: [],\n    replyText: `📦 EAN <code>${ean}</code>: Naehrwerte fehlen in Open Food Facts.`\n  }}];\n}\n\nconst grams = 100;  // default\nconst factor = grams / 100;\nconst name = p.product_name_de || p.product_name || 'Unbekanntes Produkt';\nconst brand = (p.brands || '').split(',')[0].trim();\nconst displayName = brand ? `${brand} ${name}`.trim() : name;\n\nconst protein = (n.proteins_100g || 0) * factor;\nconst carbs = (n.carbohydrates_100g || 0) * factor;\nconst fat = (n.fat_100g || 0) * factor;\nconst kcal = kcal100 * factor;\n\nconst now = new Date();\nconst pad = x => String(x).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = [{\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: displayName,\n  'Menge (g)': grams,\n  kcal: Math.round(kcal),\n  'Eiweiß (g)': Math.round(protein * 10) / 10,\n  'KH (g)': Math.round(carbs * 10) / 10,\n  'Fett (g)': Math.round(fat * 10) / 10,\n  Quelle: 'OFF-Barcode',\n  Notiz: `EAN ${ean}`\n}];\n\nconst replyText = `📦 <b>${displayName}</b>\\n${grams}g geloggt: ${Math.round(kcal)} kcal (P ${Math.round(protein)} / KH ${Math.round(carbs)} / F ${Math.round(fat)})\\n\\n<i>Andere Menge? Schick z.B. \"${displayName} 200g\" als Text.</i>`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
+      },
+      "id": "node-off-parse",
+      "name": "Barcode: Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Anthropic Text Request bauen\nconst trigger = $('Telegram Trigger').first().json;\nconst chatId = trigger.message.chat.id;\nconst userText = trigger.message.text || '';\n\nconst schema = {\n  type: 'object',\n  properties: {\n    items: {\n      type: 'array',\n      items: {\n        type: 'object',\n        properties: {\n          name: { type: 'string' },\n          grams: { type: 'number' },\n          kcal: { type: 'number' },\n          protein: { type: 'number' },\n          carbs: { type: 'number' },\n          fat: { type: 'number' }\n        },\n        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],\n        additionalProperties: false\n      }\n    },\n    summary: { type: 'string' }\n  },\n  required: ['items', 'summary'],\n  additionalProperties: false\n};\n\nreturn [{\n  json: {\n    chatId,\n    body: {\n      model: 'claude-opus-4-7',\n      max_tokens: 2048,\n      system: 'Du bist ein praeziser Ernaehrungs-Parser. Der User schickt auf Deutsch was er gegessen hat. Zerlege es in einzelne Lebensmittel und schaetze fuer jedes: Name, Portionsgroesse in Gramm, und Naehrwerte fuer DIESE Portion (kcal, Eiweiss, KH, Fett in g). Wenn keine Menge angegeben ist, nimm typische Portionen an (z.B. 1 Ei = 60g). Sei realistisch.',\n      messages: [{ role: 'user', content: `Was ich gegessen habe: ${userText}` }],\n      output_config: { format: { type: 'json_schema', schema } }\n    }\n  }\n}];"
+      },
+      "id": "node-text-build",
+      "name": "Text: Body bauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 720]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "node-text-anthropic",
+      "name": "Anthropic Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 720],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE-ANTHROPIC-CRED",
+          "name": "Anthropic API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Text-Antwort parsen, Reply + Rows bauen\nconst chatId = $('Text: Body bauen').first().json.chatId;\nconst resp = $input.first().json;\nconst textBlock = (resp.content || []).find(b => b.type === 'text');\nif (!textBlock) {\n  throw new Error('Keine Text-Antwort von Claude.');\n}\nconst parsed = JSON.parse(textBlock.text);\n\nconst now = new Date();\nconst pad = x => String(x).padStart(2, '0');\nconst datum = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst zeit = `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nconst rows = parsed.items.map(it => ({\n  Datum: datum,\n  Zeit: zeit,\n  Mahlzeit: it.name,\n  'Menge (g)': Math.round(it.grams * 10) / 10,\n  kcal: Math.round(it.kcal),\n  'Eiweiß (g)': Math.round(it.protein * 10) / 10,\n  'KH (g)': Math.round(it.carbs * 10) / 10,\n  'Fett (g)': Math.round(it.fat * 10) / 10,\n  Quelle: 'KI-Schätzung',\n  Notiz: ''\n}));\n\nconst totalKcal = parsed.items.reduce((s, x) => s + x.kcal, 0);\nconst totalP = parsed.items.reduce((s, x) => s + x.protein, 0);\nconst totalC = parsed.items.reduce((s, x) => s + x.carbs, 0);\nconst totalF = parsed.items.reduce((s, x) => s + x.fat, 0);\n\nconst lines = parsed.items.map(it =>\n  `• ${it.name} (${Math.round(it.grams)}g): ${Math.round(it.kcal)} kcal`\n);\nconst replyText = `📝 <b>Geloggt:</b>\\n${lines.join('\\n')}\\n\\n<b>Σ ${Math.round(totalKcal)} kcal</b> (P ${Math.round(totalP)} / KH ${Math.round(totalC)} / F ${Math.round(totalF)})`;\n\nreturn [{ json: { chatId, rows, replyText } }];"
+      },
+      "id": "node-text-parse",
+      "name": "Text: Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 720]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aus einem Item mit rows-Array N Items machen (eins pro Sheet-Zeile)\nconst src = $input.first().json;\nif (!src.rows || src.rows.length === 0) {\n  return [];\n}\nreturn src.rows.map(row => ({ json: row }));"
+      },
+      "id": "node-fanout",
+      "name": "Rows -> Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 460]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE-WITH-YOUR-SHEET-ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "node-sheets-append",
+      "name": "Sheets: Append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1560, 460],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE-SHEETS-CRED",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.replyText }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "node-telegram-reply",
+      "name": "Telegram: Antworten",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1340, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE-TELEGRAM-CRED",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{"node": "Was ist es?", "type": "main", "index": 0}]]
+    },
+    "Was ist es?": {
+      "main": [
+        [{"node": "Foto: Body bauen", "type": "main", "index": 0}],
+        [{"node": "OFF Lookup", "type": "main", "index": 0}],
+        [{"node": "Text: Body bauen", "type": "main", "index": 0}]
+      ]
+    },
+    "Foto: Body bauen": {
+      "main": [[{"node": "Anthropic Vision", "type": "main", "index": 0}]]
+    },
+    "Anthropic Vision": {
+      "main": [[{"node": "Foto: Parse", "type": "main", "index": 0}]]
+    },
+    "Foto: Parse": {
+      "main": [[
+        {"node": "Telegram: Antworten", "type": "main", "index": 0},
+        {"node": "Rows -> Items", "type": "main", "index": 0}
+      ]]
+    },
+    "OFF Lookup": {
+      "main": [[{"node": "Barcode: Parse", "type": "main", "index": 0}]]
+    },
+    "Barcode: Parse": {
+      "main": [[
+        {"node": "Telegram: Antworten", "type": "main", "index": 0},
+        {"node": "Rows -> Items", "type": "main", "index": 0}
+      ]]
+    },
+    "Text: Body bauen": {
+      "main": [[{"node": "Anthropic Text", "type": "main", "index": 0}]]
+    },
+    "Anthropic Text": {
+      "main": [[{"node": "Text: Parse", "type": "main", "index": 0}]]
+    },
+    "Text: Parse": {
+      "main": [[
+        {"node": "Telegram: Antworten", "type": "main", "index": 0},
+        {"node": "Rows -> Items", "type": "main", "index": 0}
+      ]]
+    },
+    "Rows -> Items": {
+      "main": [[{"node": "Sheets: Append", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
