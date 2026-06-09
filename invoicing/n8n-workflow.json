@@ -1,0 +1,319 @@
+{
+  "name": "Toggl → easybill Monthly Draft Invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Schedule (1st 09:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a-workspace",
+              "name": "workspace_id",
+              "value": "REPLACE_WITH_YOUR_TOGGL_WORKSPACE_ID",
+              "type": "string"
+            },
+            {
+              "id": "a-customer",
+              "name": "customer_number",
+              "value": "10001",
+              "type": "string"
+            },
+            {
+              "id": "a-desc",
+              "name": "description",
+              "value": "Freelance Amazon Accountmanagement",
+              "type": "string"
+            },
+            {
+              "id": "a-rate",
+              "name": "hourly_rate_net",
+              "value": 23.80,
+              "type": "number"
+            },
+            {
+              "id": "a-vat",
+              "name": "vat_percent",
+              "value": 19,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const now = new Date();\nconst y0 = now.getUTCFullYear();\nconst m0 = now.getUTCMonth(); // 0..11\nconst year  = m0 === 0 ? y0 - 1 : y0;\nconst month = m0 === 0 ? 12 : m0; // 1..12 for previous month\nconst start = new Date(Date.UTC(year, month - 1, 1));\nconst end   = new Date(Date.UTC(year, month, 0));\nconst fmt = (d) => d.toISOString().slice(0, 10);\nreturn [{ json: {\n  start_date: fmt(start),\n  end_date:   fmt(end),\n  month_label: `${year}-${String(month).padStart(2, '0')}`\n}}];\n"
+      },
+      "id": "node-daterange",
+      "name": "Date Range (prev month)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Config').item.json.workspace_id }}/search/time_entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"page_size\": 1000\n}",
+        "options": {}
+      },
+      "id": "node-toggl-entries",
+      "name": "Toggl: Get Time Entries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "toggl-basic-auth",
+          "name": "Toggl Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Toggl Reports v3 returns an array of groups, each with a `time_entries` array.\nconst items = $input.all();\nlet totalSeconds = 0;\nfor (const item of items) {\n  const groups = Array.isArray(item.json) ? item.json : [item.json];\n  for (const group of groups) {\n    const entries = group.time_entries || [];\n    for (const e of entries) {\n      totalSeconds += Number(e.seconds || 0);\n    }\n  }\n}\nconst hours = Math.round((totalSeconds / 3600) * 10000) / 10000;\nconst rate  = Number($('Config').item.json.hourly_rate_net);\nconst vat   = Number($('Config').item.json.vat_percent);\nconst net   = Math.round(hours * rate * 100) / 100;\nconst gross = Math.round(net * (1 + vat / 100) * 100) / 100;\nif (hours <= 0) {\n  throw new Error('No tracked hours in this period – aborting.');\n}\nreturn [{ json: { total_seconds: totalSeconds, hours, net, gross } }];\n"
+      },
+      "id": "node-sum",
+      "name": "Sum Hours",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.track.toggl.com/reports/api/v3/workspace/{{ $('Config').item.json.workspace_id }}/search/time_entries.pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"start_date\": \"{{ $('Date Range (prev month)').item.json.start_date }}\",\n  \"end_date\":   \"{{ $('Date Range (prev month)').item.json.end_date }}\",\n  \"date_format\": \"DD.MM.YYYY\",\n  \"duration_format\": \"improved\",\n  \"display_mode\": \"date_and_time\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "node-toggl-pdf",
+      "name": "Toggl: Get Detailed PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "toggl-basic-auth",
+          "name": "Toggl Basic Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.easybill.de/rest/v1/customers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Config').item.json.customer_number }}"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-eb-find-customer",
+      "name": "easybill: Find Customer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "easybill-bearer",
+          "name": "easybill Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const wanted = String($('Config').item.json.customer_number);\nconst items = $input.first().json.items || [];\nconst match = items.find((c) => String(c.number) === wanted);\nif (!match) {\n  throw new Error(`easybill customer with number ${wanted} not found`);\n}\nreturn [{ json: { customer_id: match.id, customer_name: match.company_name || `${match.first_name||''} ${match.last_name||''}`.trim() } }];\n"
+      },
+      "id": "node-pick-customer",
+      "name": "Pick Customer ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.easybill.de/rest/v1/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"customer_id\": {{ $('Pick Customer ID').item.json.customer_id }},\n  \"document_type\": \"INVOICE\",\n  \"status\": \"DRAFT\",\n  \"items\": [\n    {\n      \"position\": 1,\n      \"description\": \"{{ $('Config').item.json.description }}\",\n      \"quantity\": {{ $('Sum Hours').item.json.hours }},\n      \"single_price_net\": {{ $('Config').item.json.hourly_rate_net }},\n      \"vat_percent\": {{ $('Config').item.json.vat_percent }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "node-eb-create",
+      "name": "easybill: Create Draft Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "easybill-bearer",
+          "name": "easybill Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.easybill.de/rest/v1/file-attachments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "customer_id",
+              "value": "={{ $('Pick Customer ID').item.json.customer_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-eb-upload",
+      "name": "easybill: Upload Toggl PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "easybill-bearer",
+          "name": "easybill Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.easybill.de/rest/v1/documents/{{ $('easybill: Create Draft Invoice').item.json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"document_file_attachment_ids\": [{{ $('easybill: Upload Toggl PDF').item.json.id }}]\n}",
+        "options": {}
+      },
+      "id": "node-eb-link",
+      "name": "easybill: Link Attachment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "easybill-bearer",
+          "name": "easybill Bearer"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule (1st 09:00)": {
+      "main": [[{"node": "Config", "type": "main", "index": 0}]]
+    },
+    "Config": {
+      "main": [[{"node": "Date Range (prev month)", "type": "main", "index": 0}]]
+    },
+    "Date Range (prev month)": {
+      "main": [[{"node": "Toggl: Get Time Entries", "type": "main", "index": 0}]]
+    },
+    "Toggl: Get Time Entries": {
+      "main": [[{"node": "Sum Hours", "type": "main", "index": 0}]]
+    },
+    "Sum Hours": {
+      "main": [[{"node": "Toggl: Get Detailed PDF", "type": "main", "index": 0}]]
+    },
+    "Toggl: Get Detailed PDF": {
+      "main": [[{"node": "easybill: Find Customer", "type": "main", "index": 0}]]
+    },
+    "easybill: Find Customer": {
+      "main": [[{"node": "Pick Customer ID", "type": "main", "index": 0}]]
+    },
+    "Pick Customer ID": {
+      "main": [[{"node": "easybill: Create Draft Invoice", "type": "main", "index": 0}]]
+    },
+    "easybill: Create Draft Invoice": {
+      "main": [[{"node": "easybill: Upload Toggl PDF", "type": "main", "index": 0}]]
+    },
+    "easybill: Upload Toggl PDF": {
+      "main": [[{"node": "easybill: Link Attachment", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "instanceId": "import"
+  },
+  "tags": []
+}
