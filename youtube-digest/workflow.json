@@ -1,0 +1,472 @@
+{
+  "name": "AI Video Digest — YouTube Daily 12:00",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 12 * * *"
+            }
+          ]
+        }
+      },
+      "id": "n01",
+      "name": "Daily 12:00 Berlin",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [-240, 304]
+    },
+    {
+      "parameters": {},
+      "id": "n02",
+      "name": "Manual Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-240, 496]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1",
+              "name": "playlist_id",
+              "type": "string",
+              "value": "PL1OOgH0_LShq-rBVImfOEY5Y0gCpjf1Ff"
+            },
+            {
+              "id": "p2",
+              "name": "apify_token",
+              "type": "string",
+              "value": "REPLACE_WITH_APIFY_TOKEN"
+            },
+            {
+              "id": "p3",
+              "name": "apify_actor",
+              "type": "string",
+              "value": "pintostudio~youtube-transcript-scraper"
+            },
+            {
+              "id": "p4",
+              "name": "gemini_api_key",
+              "type": "string",
+              "value": "REPLACE_WITH_GEMINI_API_KEY"
+            },
+            {
+              "id": "p5",
+              "name": "gemini_model",
+              "type": "string",
+              "value": "gemini-2.5-flash"
+            },
+            {
+              "id": "p6",
+              "name": "recipient_email",
+              "type": "string",
+              "value": "s.marxen01@gmail.com"
+            },
+            {
+              "id": "p7",
+              "name": "sheet_id",
+              "type": "string",
+              "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n03",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-16, 400]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw",
+          "cachedResultName": "AI Video Digest — State Store"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "121487602",
+          "cachedResultName": "Videos"
+        },
+        "options": {}
+      },
+      "id": "n04",
+      "name": "Get Sheet Existing",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [208, 400],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qN3yVrNISweDSA7h",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = $input.all().map(i => i.json.video_id).filter(Boolean);\nreturn [{ json: { existing_ids: ids, existing_count: ids.length } }];"
+      },
+      "id": "n05",
+      "name": "Cache Existing IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [432, 400]
+    },
+    {
+      "parameters": {
+        "resource": "playlistItem",
+        "operation": "getAll",
+        "playlistId": "={{ $('Config').first().json.playlist_id }}",
+        "part": ["snippet", "contentDetails"],
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "n06",
+      "name": "Get Playlist Items",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [656, 400],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "g6PmZQYdGBVfxhbc",
+          "name": "YouTube account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const j = item.json;\n  const sn = j.snippet || {};\n  const cd = j.contentDetails || {};\n  const videoId = cd.videoId || (sn.resourceId && sn.resourceId.videoId);\n  if (!videoId) continue;\n  out.push({ json: {\n    video_id: videoId,\n    title: sn.title || '',\n    channel: sn.videoOwnerChannelTitle || sn.channelTitle || '',\n    url: 'https://www.youtube.com/watch?v=' + videoId,\n    published_at: sn.publishedAt || '',\n    added_to_playlist_at: cd.videoPublishedAt || sn.publishedAt || ''\n  }});\n}\nreturn out;"
+      },
+      "id": "n07",
+      "name": "Extract Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cache = $('Cache Existing IDs').first().json;\nconst existing = new Set(cache.existing_ids || []);\nreturn $input.all().filter(i => !existing.has(i.json.video_id));"
+      },
+      "id": "n08",
+      "name": "Filter New",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1104, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/{{ $('Config').first().json.apify_actor }}/run-sync-get-dataset-items?token={{ $('Config').first().json.apify_token }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"videoUrl\": \"{{ $json.url }}\"\n}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "n09",
+      "name": "Apify Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1328, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robust pairing via pairedItem/itemMatching with index-fallback.\nconst out = [];\nconst apifyItems = $input.all();\nconst sourceFallback = $('Filter New').all();\nfor (let i = 0; i < apifyItems.length; i++) {\n  let meta = {};\n  try {\n    const m = $('Filter New').itemMatching(i);\n    if (m && m.json) meta = m.json;\n  } catch (e) {\n    if (sourceFallback[i] && sourceFallback[i].json) meta = sourceFallback[i].json;\n  }\n  const raw = apifyItems[i].json;\n  let chunks = [];\n  if (Array.isArray(raw)) chunks = raw;\n  else if (raw && Array.isArray(raw.data)) chunks = raw.data;\n  else if (raw && Array.isArray(raw.transcript)) chunks = raw.transcript;\n  else if (raw && Array.isArray(raw.body)) chunks = raw.body;\n  const text = chunks.map(c => typeof c === 'string' ? c : (c && (c.text || c.transcript || c.snippet) || '')).filter(Boolean).join(' ').trim();\n  const status = text.length > 100 ? 'ok' : 'no_transcript';\n  out.push({ json: { ...meta, transcript: text, transcript_status: status, transcript_length: text.length } });\n}\nreturn out;"
+      },
+      "id": "n10",
+      "name": "Parse Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1552, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nconst items = $input.all();\nconst baseSystem = 'Du bist Insight-Extractor fuer YouTube-Videos. Du extrahierst die wichtigsten Key Points.\\n\\nOUTPUT-REGELN:\\n- Markdown-Bullets, 3-7 Stueck, jeder Bullet max 1-2 Zeilen.\\n- Scanbar in 30 Sekunden.\\n- Antworte in DERSELBEN SPRACHE wie das Video (keine Uebersetzung).\\n- Gib NUR die Bullets zurueck, keine Einleitung, kein Schluss-Wrap-Up, keine Code-Fences.\\n- KEINE Zusammenfassung - extrahiere den Saft: konkrete Zahlen, Frameworks, Tools, Zitate, Empfehlungen, Daten, neue Ideen.\\n- Falls das Video keine echten Insights hat (reines Entertainment, Werbung, Vlog), schreibe genau: (keine relevanten Insights).';\nfor (const item of items) {\n  const j = item.json;\n  const userIntro = 'Titel: ' + (j.title || '') + '\\nKanal: ' + (j.channel || '') + '\\nURL: ' + (j.url || '');\n  let geminiBody;\n  let mode;\n  if (j.transcript_status === 'ok' && j.transcript_length > 100) {\n    mode = 'text';\n    const text = (j.transcript || '').slice(0, 50000);\n    geminiBody = JSON.stringify({\n      systemInstruction: { parts: [{ text: baseSystem }] },\n      contents: [{ parts: [{ text: userIntro + '\\n\\nTRANSKRIPT:\\n' + text }] }],\n      generationConfig: { temperature: 0.3, maxOutputTokens: 1500, thinkingConfig: { thinkingBudget: 0 } }\n    });\n  } else {\n    mode = 'video';\n    geminiBody = JSON.stringify({\n      systemInstruction: { parts: [{ text: baseSystem }] },\n      contents: [{ parts: [ { fileData: { fileUri: j.url } }, { text: userIntro + '\\n\\nExtrahiere die Key Points aus diesem Video direkt.' } ] }],\n      generationConfig: { temperature: 0.3, maxOutputTokens: 1500, thinkingConfig: { thinkingBudget: 0 } }\n    });\n  }\n  out.push({ json: { ...j, gemini_body: geminiBody, gemini_mode: mode } });\n}\nreturn out;"
+      },
+      "id": "n11",
+      "name": "Build Gemini Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1776, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Config').first().json.gemini_model }}:generateContent?key={{ $('Config').first().json.gemini_api_key }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "n12",
+      "name": "Gemini Key Points",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 304],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robust pairing via pairedItem/itemMatching with index-fallback.\nconst out = [];\nconst respItems = $input.all();\nconst sourceFallback = $('Build Gemini Body').all();\nfor (let i = 0; i < respItems.length; i++) {\n  let meta = {};\n  try {\n    const m = $('Build Gemini Body').itemMatching(i);\n    if (m && m.json) meta = m.json;\n  } catch (e) {\n    if (sourceFallback[i] && sourceFallback[i].json) meta = sourceFallback[i].json;\n  }\n  const resp = respItems[i].json || {};\n  let text = '';\n  try {\n    if (resp && resp.candidates && resp.candidates[0] && resp.candidates[0].content && resp.candidates[0].content.parts && resp.candidates[0].content.parts[0]) {\n      text = (resp.candidates[0].content.parts[0].text || '').trim();\n      text = text.replace(/^```\\w*\\s*/i, '').replace(/\\s*```$/, '').trim();\n    } else if (resp && resp.error && resp.error.message) {\n      text = '(Gemini-Fehler: ' + resp.error.message + ')';\n    } else if (resp && resp.promptFeedback && resp.promptFeedback.blockReason) {\n      text = '(Gemini-blockiert: ' + resp.promptFeedback.blockReason + ')';\n    } else {\n      text = '(unerwartete Gemini-Antwort)';\n    }\n  } catch (e) {\n    text = '(Parse-Fehler: ' + (e && e.message || String(e)) + ')';\n  }\n  out.push({ json: {\n    video_id: meta.video_id || '',\n    title: meta.title || '',\n    channel: meta.channel || '',\n    url: meta.url || '',\n    published_at: meta.published_at || '',\n    added_to_playlist_at: meta.added_to_playlist_at || '',\n    language: '',\n    transcript_status: meta.transcript_status || 'unknown',\n    gemini_mode: meta.gemini_mode || '',\n    transcript: (meta.transcript || '').slice(0, 49000),\n    key_points: text,\n    summary_sent_at: ''\n  }});\n}\nreturn out;"
+      },
+      "id": "n13",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2224, 304]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw",
+          "cachedResultName": "AI Video Digest — State Store"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "121487602",
+          "cachedResultName": "Videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "video_id": "={{ $json.video_id }}",
+            "title": "={{ $json.title }}",
+            "channel": "={{ $json.channel }}",
+            "url": "={{ $json.url }}",
+            "published_at": "={{ $json.published_at }}",
+            "added_to_playlist_at": "={{ $json.added_to_playlist_at }}",
+            "language": "={{ $json.gemini_mode }}",
+            "transcript_status": "={{ $json.transcript_status }}",
+            "key_points": "={{ $json.key_points }}",
+            "transcript": "={{ $json.transcript }}",
+            "summary_sent_at": "={{ $json.summary_sent_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "video_id", "displayName": "video_id", "type": "string", "canBeUsedToMatch": true, "required": false },
+            { "id": "title", "displayName": "title", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "channel", "displayName": "channel", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "url", "displayName": "url", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "published_at", "displayName": "published_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "added_to_playlist_at", "displayName": "added_to_playlist_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript", "displayName": "transcript", "type": "string", "canBeUsedToMatch": false, "required": false }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "n14",
+      "name": "Append OK",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2448, 304],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qN3yVrNISweDSA7h",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst withInsights = items.filter(i => {\n  const kp = (i.json.key_points || '').toLowerCase();\n  if (!kp) return false;\n  if (/keine relevanten insights/i.test(kp)) return false;\n  if (kp.startsWith('(gemini-fehler') || kp.startsWith('(gemini-blockiert') || kp.startsWith('(parse-fehler') || kp.startsWith('(unerwartete gemini')) return false;\n  return true;\n});\nif (withInsights.length === 0) return [];\n\nconst esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\nconst mdToHtml = md => {\n  const lines = String(md).split(/\\r?\\n/);\n  let html = ''; let inList = false;\n  for (const line of lines) {\n    const m = line.match(/^\\s*[-*•]\\s+(.*)$/);\n    if (m) {\n      if (!inList) { html += '<ul style=\"margin:8px 0 12px 20px;padding:0;\">'; inList = true; }\n      let c = esc(m[1]);\n      c = c.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>' + '$' + '1</strong>');\n      c = c.replace(/\\*([^*]+)\\*/g, '<em>' + '$' + '1</em>');\n      html += '<li style=\"margin-bottom:6px;line-height:1.5;\">' + c + '</li>';\n    } else {\n      if (inList) { html += '</ul>'; inList = false; }\n      const t = line.trim();\n      if (t) html += '<p style=\"margin:8px 0;line-height:1.5;\">' + esc(t) + '</p>';\n    }\n  }\n  if (inList) html += '</ul>';\n  return html;\n};\n\nconst today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst headerLine = withInsights.length === 1 ? '1 neues Video' : withInsights.length + ' neue Videos';\nconst sheetUrl = 'https://docs.google.com/spreadsheets/d/1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw';\n\nlet body = '<!DOCTYPE html><html><body style=\"font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:680px;margin:0 auto;padding:24px;color:#1a1a1a;background:#fafafa;\">';\nbody += '<div style=\"margin-bottom:24px;\"><h1 style=\"margin:0 0 4px;font-size:22px;color:#111;\">AI Video Digest</h1>';\nbody += '<p style=\"margin:0;color:#666;font-size:14px;\">' + esc(today) + ' · ' + headerLine + ' aus deiner Playlist</p></div>';\nfor (const it of withInsights) {\n  const j = it.json;\n  const modeBadge = j.gemini_mode === 'video' ? '<span style=\"display:inline-block;font-size:10px;background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;margin-left:6px;\">via Video-Direkt-Analyse</span>' : '';\n  body += '<div style=\"background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:20px;margin-bottom:16px;\">';\n  body += '<div style=\"font-size:12px;color:#888;margin-bottom:4px;\">' + esc(j.channel) + modeBadge + '</div>';\n  body += '<h2 style=\"margin:0 0 12px;font-size:17px;line-height:1.3;\"><a href=\"' + esc(j.url) + '\" style=\"color:#111;text-decoration:none;\">' + esc(j.title) + '</a></h2>';\n  body += '<div style=\"font-size:14px;color:#222;\">' + mdToHtml(j.key_points) + '</div>';\n  body += '<div style=\"margin-top:12px;\"><a href=\"' + esc(j.url) + '\" style=\"display:inline-block;padding:8px 14px;background:#ff0000;color:#fff;border-radius:6px;text-decoration:none;font-size:13px;\">Video oeffnen</a></div>';\n  body += '</div>';\n}\nbody += '<p style=\"margin-top:24px;color:#999;font-size:12px;text-align:center;\">Automatisiert via n8n + Gemini 2.5 Flash · <a href=\"' + sheetUrl + '\" style=\"color:#999;\">State Sheet</a></p>';\nbody += '</body></html>';\n\nconst subject = withInsights.length === 1 ? 'AI Video Digest — ' + withInsights[0].json.title.slice(0, 60) : 'AI Video Digest — ' + withInsights.length + ' neue Videos';\n\nreturn [{ json: { subject, body_html: body, video_ids: withInsights.map(i => i.json.video_id), count: withInsights.length } }];"
+      },
+      "id": "n15",
+      "name": "Aggregate Email Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2672, 304]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').first().json.recipient_email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body_html }}",
+        "options": {}
+      },
+      "id": "n16",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2896, 304],
+      "webhookId": "b1cd454a-cf3a-484d-9066-d4bf3babd7b1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "WtFeeKnwbYaizTR1",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst videoIds = $('Aggregate Email Body').first().json.video_ids || [];\nconst now = new Date().toISOString();\nreturn videoIds.map(id => ({ json: { video_id: id, summary_sent_at: now } }));"
+      },
+      "id": "n17",
+      "name": "Prepare Mark Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3120, 304]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw",
+          "cachedResultName": "AI Video Digest — State Store"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "121487602",
+          "cachedResultName": "Videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["video_id"],
+          "value": {
+            "video_id": "={{ $json.video_id }}",
+            "summary_sent_at": "={{ $json.summary_sent_at }}"
+          },
+          "schema": [
+            { "id": "video_id", "displayName": "video_id", "type": "string", "canBeUsedToMatch": true, "required": true },
+            { "id": "title", "displayName": "title", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "channel", "displayName": "channel", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "url", "displayName": "url", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "published_at", "displayName": "published_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "added_to_playlist_at", "displayName": "added_to_playlist_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript", "displayName": "transcript", "type": "string", "canBeUsedToMatch": false, "required": false }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "id": "n18",
+      "name": "Mark Sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [3344, 304],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qN3yVrNISweDSA7h",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 12:00 Berlin": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Manual Test": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Get Sheet Existing", "type": "main", "index": 0 }]]
+    },
+    "Get Sheet Existing": {
+      "main": [[{ "node": "Cache Existing IDs", "type": "main", "index": 0 }]]
+    },
+    "Cache Existing IDs": {
+      "main": [[{ "node": "Get Playlist Items", "type": "main", "index": 0 }]]
+    },
+    "Get Playlist Items": {
+      "main": [[{ "node": "Extract Fields", "type": "main", "index": 0 }]]
+    },
+    "Extract Fields": {
+      "main": [[{ "node": "Filter New", "type": "main", "index": 0 }]]
+    },
+    "Filter New": {
+      "main": [[{ "node": "Apify Transcript", "type": "main", "index": 0 }]]
+    },
+    "Apify Transcript": {
+      "main": [[{ "node": "Parse Transcript", "type": "main", "index": 0 }]]
+    },
+    "Parse Transcript": {
+      "main": [[{ "node": "Build Gemini Body", "type": "main", "index": 0 }]]
+    },
+    "Build Gemini Body": {
+      "main": [[{ "node": "Gemini Key Points", "type": "main", "index": 0 }]]
+    },
+    "Gemini Key Points": {
+      "main": [[{ "node": "Parse Gemini Response", "type": "main", "index": 0 }]]
+    },
+    "Parse Gemini Response": {
+      "main": [[{ "node": "Append OK", "type": "main", "index": 0 }]]
+    },
+    "Append OK": {
+      "main": [[{ "node": "Aggregate Email Body", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Email Body": {
+      "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]]
+    },
+    "Send Email": {
+      "main": [[{ "node": "Prepare Mark Sent", "type": "main", "index": 0 }]]
+    },
+    "Prepare Mark Sent": {
+      "main": [[{ "node": "Mark Sent", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Berlin",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": []
+}

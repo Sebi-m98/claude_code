@@ -1,0 +1,326 @@
+{
+  "name": "AI Video Digest — Transcript Backfill (one-shot)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b01",
+      "name": "Run Backfill",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-260, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "apify_token",
+              "type": "string",
+              "value": "REPLACE_WITH_APIFY_TOKEN"
+            },
+            {
+              "id": "c2",
+              "name": "apify_actor",
+              "type": "string",
+              "value": "pintostudio~youtube-transcript-scraper"
+            },
+            {
+              "id": "c3",
+              "name": "supadata_api_key",
+              "type": "string",
+              "value": "REPLACE_WITH_SUPADATA_API_KEY"
+            },
+            {
+              "id": "c4",
+              "name": "sheet_id",
+              "type": "string",
+              "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b02",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-40, 300]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw",
+          "cachedResultName": "AI Video Digest — State Store"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "121487602",
+          "cachedResultName": "Videos"
+        },
+        "options": {}
+      },
+      "id": "b03",
+      "name": "Get All Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [180, 300],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qN3yVrNISweDSA7h",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep only rows that still need a transcript (transcript cell empty).\n// Trim each row down to video_id + url so the loop stays light.\nreturn $input.all().filter(i => {\n  const j = i.json;\n  if (!j.video_id) return false;\n  const t = (j.transcript == null ? '' : String(j.transcript)).trim();\n  return t.length === 0;\n}).map(i => {\n  const j = i.json;\n  const url = (j.url && String(j.url).startsWith('http')) ? String(j.url) : ('https://www.youtube.com/watch?v=' + j.video_id);\n  return { json: { video_id: j.video_id, url } };\n});"
+      },
+      "id": "b04",
+      "name": "Filter Need Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "b05",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/{{ $('Config').first().json.apify_actor }}/run-sync-get-dataset-items?token={{ $('Config').first().json.apify_token }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"videoUrl\": \"{{ $json.url }}\"\n}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b06",
+      "name": "Apify Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 180],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Apify response, pair with current looped row (batchSize 1).\n// Decide whether a Supadata fallback is needed (only if Apify came up empty\n// AND a Supadata key is configured).\nconst apify = $input.all();\nconst src = $('Loop Over Items').all();\nconst cfg = $('Config').first().json;\nconst key = cfg.supadata_api_key || '';\nconst keyOk = key && key !== 'REPLACE_WITH_SUPADATA_API_KEY';\nconst out = [];\nfor (let i = 0; i < apify.length; i++) {\n  const meta = (src[i] && src[i].json) || (src[0] && src[0].json) || {};\n  const raw = apify[i].json;\n  let chunks = [];\n  if (Array.isArray(raw)) chunks = raw;\n  else if (raw && Array.isArray(raw.data)) chunks = raw.data;\n  else if (raw && Array.isArray(raw.transcript)) chunks = raw.transcript;\n  else if (raw && Array.isArray(raw.body)) chunks = raw.body;\n  const text = chunks.map(c => typeof c === 'string' ? c : (c && (c.text || c.transcript || c.snippet) || '')).filter(Boolean).join(' ').trim();\n  const ok = text.length > 100;\n  out.push({ json: {\n    video_id: meta.video_id || '',\n    url: meta.url || ('https://www.youtube.com/watch?v=' + (meta.video_id || '')),\n    transcript: ok ? text.slice(0, 49000) : '',\n    transcript_status: ok ? 'ok' : 'no_transcript',\n    transcript_length: text.length,\n    source: ok ? 'apify' : '',\n    do_fallback: (!ok) && keyOk\n  }});\n}\nreturn out;"
+      },
+      "id": "b07",
+      "name": "Parse Apify Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-fallback",
+              "leftValue": "={{ $json.do_fallback }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b08",
+      "name": "Need Fallback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1240, 180]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.supadata.ai/v1/youtube/transcript?text=true&url={{ encodeURIComponent($json.url) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $('Config').first().json.supadata_api_key }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "b09",
+      "name": "Supadata Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 80],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Supadata response; if it found text use it, otherwise keep the\n// (empty) Apify result so the row is still written as no_transcript.\nconst meta = $('Parse Apify Transcript').first().json;\nconst resp = ($input.first() && $input.first().json) || {};\nlet text = '';\nif (typeof resp.content === 'string') text = resp.content;\nelse if (Array.isArray(resp.content)) text = resp.content.map(c => typeof c === 'string' ? c : (c && c.text) || '').filter(Boolean).join(' ');\nelse if (typeof resp.transcript === 'string') text = resp.transcript;\ntext = (text || '').trim();\nconst ok = text.length > 100;\nreturn [{ json: {\n  video_id: meta.video_id,\n  url: meta.url,\n  transcript: ok ? text.slice(0, 49000) : (meta.transcript || ''),\n  transcript_status: ok ? 'ok' : (meta.transcript_status || 'no_transcript'),\n  source: ok ? 'supadata' : (meta.source || '')\n}}];"
+      },
+      "id": "b10",
+      "name": "Parse Supadata Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 80]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1EfVBDj8QVgyUkSMGZMsmYTCXWmRh_ri0x4oDHLizOCw",
+          "cachedResultName": "AI Video Digest — State Store"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "121487602",
+          "cachedResultName": "Videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["video_id"],
+          "value": {
+            "video_id": "={{ $json.video_id }}",
+            "transcript_status": "={{ $json.transcript_status }}",
+            "transcript": "={{ $json.transcript }}"
+          },
+          "schema": [
+            { "id": "video_id", "displayName": "video_id", "type": "string", "canBeUsedToMatch": true, "required": true },
+            { "id": "title", "displayName": "title", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "channel", "displayName": "channel", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "url", "displayName": "url", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "published_at", "displayName": "published_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "added_to_playlist_at", "displayName": "added_to_playlist_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript", "displayName": "transcript", "type": "string", "canBeUsedToMatch": false, "required": false }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "b11",
+      "name": "Update Transcript",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1880, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qN3yVrNISweDSA7h",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "b12",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [840, 420]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Backfill": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Get All Rows", "type": "main", "index": 0 }]]
+    },
+    "Get All Rows": {
+      "main": [[{ "node": "Filter Need Transcript", "type": "main", "index": 0 }]]
+    },
+    "Filter Need Transcript": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Items": {
+      "main": [
+        [{ "node": "Done", "type": "main", "index": 0 }],
+        [{ "node": "Apify Transcript", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apify Transcript": {
+      "main": [[{ "node": "Parse Apify Transcript", "type": "main", "index": 0 }]]
+    },
+    "Parse Apify Transcript": {
+      "main": [[{ "node": "Need Fallback?", "type": "main", "index": 0 }]]
+    },
+    "Need Fallback?": {
+      "main": [
+        [{ "node": "Supadata Transcript", "type": "main", "index": 0 }],
+        [{ "node": "Update Transcript", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supadata Transcript": {
+      "main": [[{ "node": "Parse Supadata Transcript", "type": "main", "index": 0 }]]
+    },
+    "Parse Supadata Transcript": {
+      "main": [[{ "node": "Update Transcript", "type": "main", "index": 0 }]]
+    },
+    "Update Transcript": {
+      "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Berlin",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": []
+}
