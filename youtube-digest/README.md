@@ -53,6 +53,7 @@ So liegt kein Klartext-Secret im Workflow-JSON.
 | 5 | `Get Sheet Existing` lieferte beim leeren State-Sheet (Initial-Run) 0 Items — n8n stoppt den Workflow per Default. | `alwaysOutputData: true` gesetzt; `Cache Existing IDs` und `Filter New` sind bereits robust gegen leere Inputs. |
 | 6 | `Mark Sent` warf `Column names were updated after the node's setup`, weil sein Schema nur `video_id` + `summary_sent_at` kannte, das Sheet aber von `Append OK` schon mit allen 10 Spalten befüllt war. | Schema im `Mark Sent` auf alle 10 Sheet-Spalten erweitert; `value`-Mapping bleibt auf den zwei Spalten (Rest unverändert beim Update). |
 | 7 | Das rohe Transkript wurde nie persistiert — nur `key_points`. | Neue Spalte `transcript`: `Parse Gemini Response` reicht `meta.transcript` (auf 49.000 Zeichen gekappt, Sheets-Zelllimit) durch, `Append OK` schreibt sie, `Mark Sent`-Schema kennt sie. |
+| 8 | Apify als einzige Transkript-Quelle ließ ~15–20 Videos ohne Transkript. | Backfill nutzt eine **Fallback-Kette**: Apify → (falls leer) Supadata. `Need Fallback?`-Weiche ruft Supadata nur bei Bedarf auf; ohne Key wird Quelle 2 übersprungen. |
 
 ## Transkript-Backfill (einmalig, `backfill-transcripts.json`)
 
@@ -64,14 +65,21 @@ sie nach — unabhängig vom täglichen Digest.
 Sheet schreiben darf nur n8n (dort liegt die OAuth-Credential). Ein externes
 Direkt-Schreiben ins Sheet ist hier nicht möglich, daher dieser One-Shot.
 
-**Ablauf:** `Run Backfill` → liest alle Zeilen → filtert die mit leerer
-`transcript`-Zelle → Schleife (1 Video/Durchlauf, schont Apify-Rate-Limit) →
-Apify-Transkript → `appendOrUpdate` schreibt `transcript` + `transcript_status`
-gematcht über `video_id`.
+**Ablauf (zwei Quellen, Fallback-Kette):** `Run Backfill` → liest alle Zeilen →
+filtert die mit leerer `transcript`-Zelle → Schleife (1 Video/Durchlauf, schont
+Rate-Limits) → **Quelle 1: Apify**. Liefert Apify nichts und ist ein
+Supadata-Key gesetzt → **Quelle 2: Supadata** (`Need Fallback?`-Weiche). Dann
+`appendOrUpdate` schreibt `transcript` + `transcript_status` gematcht über
+`video_id`. Supadata wird **nur** angefragt, wenn Apify leer ausging — spart
+Kontingent/Kosten.
 
 **So benutzt du ihn:**
 1. `backfill-transcripts.json` in n8n importieren.
-2. Im `Config`-Node `apify_token` setzen (gleicher Token wie im Daily).
+2. Im `Config`-Node setzen:
+   - `apify_token` (gleicher Token wie im Daily).
+   - `supadata_api_key` — kostenlosen Key unter <https://supadata.ai> holen
+     (Free-Tier reicht für den Backfill). **Optional:** lässt du den Platzhalter
+     stehen, überspringt der Workflow Quelle 2 automatisch und nutzt nur Apify.
 3. Google-Sheets-Credential im `Get All Rows`- und `Update Transcript`-Node
    zuordnen.
 4. `Run Backfill` klicken. Läuft sequenziell durch alle Videos (~10–20 Min bei 61).
@@ -80,14 +88,19 @@ gematcht über `video_id`.
 - **Idempotent:** Verarbeitet nur Zeilen mit leerer `transcript`-Zelle.
   Erneutes Ausführen holt genau die nach, die beim letzten Mal leer blieben
   (z. B. Apify-Timeout) — bereits gefüllte werden übersprungen.
-- **Erwartbare Abdeckung:** ~31 Videos hatten ein abrufbares Transkript
-  (`transcript_status: ok`), ~15–20 nicht (echte Caption-Sperre/Live/Privat).
-  Für letztere bleibt die Zelle leer und `transcript_status` = `no_transcript`;
-  da half im Daily nur Geminis Video-Direkt-Analyse, es gibt also schlicht
-  keinen Transkript-Text. Höhere Abdeckung ginge nur über eine andere Quelle
-  (anderer Apify-Actor, Supadata, oder Audio→Whisper) — auf Wunsch nachrüstbar.
+- **Erwartbare Abdeckung:** ~31 Videos hatten via Apify ein abrufbares
+  Transkript (`transcript_status: ok`). Die ~15–20 `no_transcript`-Videos
+  bekommen jetzt einen zweiten Versuch über Supadata; was dort auch scheitert
+  (echte Caption-Sperre/Live/Privat), bleibt leer (`no_transcript`). Für noch
+  höhere Abdeckung bliebe nur Audio→Whisper — auf Wunsch nachrüstbar.
 - **`cellFormat: RAW`** beim Schreiben, damit Transkripte mit führendem
   `=`/`+`/`@` nicht als Sheets-Formel interpretiert werden.
+
+> **Hinweis Daily-Workflow:** Der tägliche `workflow.json` nutzt aktuell nur
+> Apify (+ Geminis Video-Direkt-Modus als Notnagel). Wenn du dieselbe
+> Supadata-Fallback-Kette auch dort haben willst, damit künftige Läufe mehr
+> echte Transkripte ins Sheet schreiben, sag Bescheid — ich spiegle die Weiche
+> dann in den Daily.
 
 ## Bekannte Schwachstellen (nicht gefixt — Designentscheidung)
 
