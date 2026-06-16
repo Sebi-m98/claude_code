@@ -242,7 +242,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Robust pairing via pairedItem/itemMatching with index-fallback.\nconst out = [];\nconst respItems = $input.all();\nconst sourceFallback = $('Build Gemini Body').all();\nfor (let i = 0; i < respItems.length; i++) {\n  let meta = {};\n  try {\n    const m = $('Build Gemini Body').itemMatching(i);\n    if (m && m.json) meta = m.json;\n  } catch (e) {\n    if (sourceFallback[i] && sourceFallback[i].json) meta = sourceFallback[i].json;\n  }\n  const resp = respItems[i].json || {};\n  let text = '';\n  try {\n    if (resp && resp.candidates && resp.candidates[0] && resp.candidates[0].content && resp.candidates[0].content.parts && resp.candidates[0].content.parts[0]) {\n      text = (resp.candidates[0].content.parts[0].text || '').trim();\n      text = text.replace(/^```\\w*\\s*/i, '').replace(/\\s*```$/, '').trim();\n    } else if (resp && resp.error && resp.error.message) {\n      text = '(Gemini-Fehler: ' + resp.error.message + ')';\n    } else if (resp && resp.promptFeedback && resp.promptFeedback.blockReason) {\n      text = '(Gemini-blockiert: ' + resp.promptFeedback.blockReason + ')';\n    } else {\n      text = '(unerwartete Gemini-Antwort)';\n    }\n  } catch (e) {\n    text = '(Parse-Fehler: ' + (e && e.message || String(e)) + ')';\n  }\n  out.push({ json: {\n    video_id: meta.video_id || '',\n    title: meta.title || '',\n    channel: meta.channel || '',\n    url: meta.url || '',\n    published_at: meta.published_at || '',\n    added_to_playlist_at: meta.added_to_playlist_at || '',\n    language: '',\n    transcript_status: meta.transcript_status || 'unknown',\n    gemini_mode: meta.gemini_mode || '',\n    key_points: text,\n    summary_sent_at: ''\n  }});\n}\nreturn out;"
+        "jsCode": "// Robust pairing via pairedItem/itemMatching with index-fallback.\nconst out = [];\nconst respItems = $input.all();\nconst sourceFallback = $('Build Gemini Body').all();\nfor (let i = 0; i < respItems.length; i++) {\n  let meta = {};\n  try {\n    const m = $('Build Gemini Body').itemMatching(i);\n    if (m && m.json) meta = m.json;\n  } catch (e) {\n    if (sourceFallback[i] && sourceFallback[i].json) meta = sourceFallback[i].json;\n  }\n  const resp = respItems[i].json || {};\n  let text = '';\n  try {\n    if (resp && resp.candidates && resp.candidates[0] && resp.candidates[0].content && resp.candidates[0].content.parts && resp.candidates[0].content.parts[0]) {\n      text = (resp.candidates[0].content.parts[0].text || '').trim();\n      text = text.replace(/^```\\w*\\s*/i, '').replace(/\\s*```$/, '').trim();\n    } else if (resp && resp.error && resp.error.message) {\n      text = '(Gemini-Fehler: ' + resp.error.message + ')';\n    } else if (resp && resp.promptFeedback && resp.promptFeedback.blockReason) {\n      text = '(Gemini-blockiert: ' + resp.promptFeedback.blockReason + ')';\n    } else {\n      text = '(unerwartete Gemini-Antwort)';\n    }\n  } catch (e) {\n    text = '(Parse-Fehler: ' + (e && e.message || String(e)) + ')';\n  }\n  out.push({ json: {\n    video_id: meta.video_id || '',\n    title: meta.title || '',\n    channel: meta.channel || '',\n    url: meta.url || '',\n    published_at: meta.published_at || '',\n    added_to_playlist_at: meta.added_to_playlist_at || '',\n    language: '',\n    transcript_status: meta.transcript_status || 'unknown',\n    gemini_mode: meta.gemini_mode || '',\n    transcript: (meta.transcript || '').slice(0, 49000),\n    key_points: text,\n    summary_sent_at: ''\n  }});\n}\nreturn out;"
       },
       "id": "n13",
       "name": "Parse Gemini Response",
@@ -277,6 +277,7 @@
             "language": "={{ $json.gemini_mode }}",
             "transcript_status": "={{ $json.transcript_status }}",
             "key_points": "={{ $json.key_points }}",
+            "transcript": "={{ $json.transcript }}",
             "summary_sent_at": "={{ $json.summary_sent_at }}"
           },
           "matchingColumns": [],
@@ -290,7 +291,8 @@
             { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
             { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
             { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
-            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false }
+            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript", "displayName": "transcript", "type": "string", "canBeUsedToMatch": false, "required": false }
           ]
         },
         "options": {
@@ -381,7 +383,8 @@
             { "id": "language", "displayName": "language", "type": "string", "canBeUsedToMatch": false, "required": false },
             { "id": "transcript_status", "displayName": "transcript_status", "type": "string", "canBeUsedToMatch": false, "required": false },
             { "id": "key_points", "displayName": "key_points", "type": "string", "canBeUsedToMatch": false, "required": false },
-            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false }
+            { "id": "summary_sent_at", "displayName": "summary_sent_at", "type": "string", "canBeUsedToMatch": false, "required": false },
+            { "id": "transcript", "displayName": "transcript", "type": "string", "canBeUsedToMatch": false, "required": false }
           ]
         },
         "options": {
