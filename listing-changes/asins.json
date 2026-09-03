@@ -1,0 +1,20 @@
+{
+  "own": [
+    {"asin": "B0FT85TLBQ", "label": "Weinglas Oma", "title": "Geschenk Oma - Edles Weinglas mit Gravur | Geburtstagsgeschenk mit schöner Verpackung | 560ml Glas für Wein, Prosecco & mehr"},
+    {"asin": "B0GDQHZBJD", "label": "Weingläser to go", "title": "Breezio 2 Weingläser to go mit Schutzcase – Weinglas to go aus gehärtetem Glas – 2 Camping Gläser mit passgenauem Case"},
+    {"asin": "B0GJZNYP4P", "label": "Katzentasse Bücher", "title": "Katzentasse mit Bücher-Motiv – Geschenke für Leseratten und Geschenke für Buchliebhaber – Katzen Tasse 300 ml aus Keramik"},
+    {"asin": "B0GK2PPQQQ", "label": "Büchertasse Thermo", "title": "Büchertasse Thermobecher – Geschenke für Leseratten und Geschenke für Buchliebhaber – Isolierbecher 530 ml aus Edelstahl"},
+    {"asin": "B0GSNSR8GL", "label": "Whisky Holz", "title": "Whisky Gläser Set 2er aus Holz – Bruchfeste Holzbecher Whiskey Gläser – auch als Rum Gläser, Tumbler Glas & Cocktail Gläser geeignet"},
+    {"asin": "B0GKB7GF5X", "label": "Whisky Wald", "title": "Breezio Whisky Gläser 2er Set mit Wald Panorama - Whiskeygläser mit Schwarzem 360° Print, Spülmaschinenfest, Premium 250ml"},
+    {"asin": "B0GQHBHCMC", "label": "Aperol 6er", "title": "Aperol Gläser 6er Set – 530 ml Aperol Spritz Gläser mit brillantem Schriftzug – Aperol Spritz Geschenkset für Aperitivo & Sommerparty"},
+    {"asin": "B0GQHSWVS2", "label": "Aperol 2er", "title": "Aperol Gläser 2er Set – 530 ml Aperol Spritz Gläser mit brillantem Schriftzug – Aperol Spritz Geschenkset für Aperitivo & Sommerparty"},
+    {"asin": "B0GQQF47ST", "label": "Lillet 2er", "title": "Lillet Gläser 2er Set 'It's Lillet Time' – Premium Aperitif Gläser aus Kristallglas 570 ml – Lillet Geschenkset mit 2 Glasstrohhalmen"}
+  ],
+  "competitors": [
+    {"asin": "B00B0MHT5G", "label": "Aperol 6 Stück (TOP)", "compOf": "B0GQHSWVS2", "title": "Aperol , Glas , Spritz Weingläser/Cocktailgläser 6 Stück/TOP-AKTUELL"},
+    {"asin": "B0FV8YKJTT", "label": "16hundred 4er", "compOf": "B0GQHSWVS2", "title": "16hundred® Moderne Aperol Spritz Gläser 4er Set | Große Cocktailgläser & Aperitifgläser | Hochwertiges Kristallglas | 640 ml"},
+    {"asin": "B0DKJ76SSQ", "label": "Maxito 6er", "compOf": "B0GQHSWVS2", "title": "Maxito Aperol Gläser von hervorragender Qualität mit 400 ml im 6er Set"},
+    {"asin": "B0D25SRRHV", "label": "Aperol 450 ml 6er", "compOf": "B0GQHSWVS2", "title": "Aperol Spritz Gläser 450 ml - 6 Stück"},
+    {"asin": "B0DK22HWDF", "label": "Maxito 4er", "compOf": "B0GQHSWVS2", "title": "Maxito Aperol Gläser von hervorragender Qualität mit 400 ml im 4er Set"}
+  ]
+}
