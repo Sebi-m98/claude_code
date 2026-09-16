@@ -1,0 +1,123 @@
+{
+  "name": "SB · Stündliche KPIs (heute vs. gestern)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "trigger",
+      "name": "Jede Stunde",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-700, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ACCOUNT_ID = 'a706de72-ef6f-11ed-ae54-78ac440eef32';\n\n// Sellerboard rechnet tagesgenau in UTC. Lokale Mitternacht (CEST = UTC+2) liegt im VORTAG (UTC)\n// -> deshalb den Tag strikt aus UTC ableiten, sonst pollt man stundenlang ein totes Gestern.\nconst DAY = 86400;\nconst todayUtc = Math.floor(Date.now() / 1000 / DAY) * DAY;\nconst yesterdayUtc = todayUtc - DAY;\n\nreturn [{ json: {\n  tool: 'dashboard_period',\n  arguments: {\n    account_id: ACCOUNT_ID,\n    periods: [{ start: todayUtc, end: todayUtc, compare_to_start: yesterdayUtc, compare_to_end: yesterdayUtc }]\n  }\n}}];"
+      },
+      "id": "build",
+      "name": "Aufruf bauen (UTC-Tag)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "list", "value": "", "cachedResultName": "SB · MCP Call (Sub-Workflow)" },
+        "mode": "once"
+      },
+      "id": "mcp",
+      "name": "SB · MCP Call",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-260, 0],
+      "notes": "Hier den Sub-Workflow '00' auswaehlen"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nif (!r.ok) throw new Error('Sellerboard-Call fehlgeschlagen: ' + r.error);\n\nconst period = r.payload?.result?.[0] || {};\nconst info = period.data?.Info || {};\nconst cmp = period.compare || {};\nconst fees = Object.fromEntries((period.data?.AmazonFeeDetails || []).map(f => [f.fee, f.sum]));\n\nconst kpi = {\n  zeitpunkt: new Date().toISOString(),\n  tagUtc: r.payload?.resolvedPeriods?.[0]?.from || null,\n  umsatz: info.Sales ?? 0,\n  einheiten: info.Units ?? 0,\n  bestellungen: info.Orders ?? 0,\n  erstattungen: info.Refunds ?? 0,\n  nettogewinn: info.NetProfit ?? 0,\n  marge_pct: info.Margin ?? null,\n  roi_pct: info.ROI ?? null,\n  werbekosten: info.Advertising ?? 0,\n  umsatz_ppc: info.SalesPPC ?? 0,\n  umsatz_organisch: info.SalesOrganic ?? 0,\n  real_acos_pct: info.RealACOS ?? null,\n  tacos_pct: info.Sales ? Math.round(Math.abs(info.Advertising || 0) / info.Sales * 1000) / 10 : null,\n  amazon_gebuehren: info.AmazonFees ?? 0,\n  produktkosten: info.ProductCosts ?? 0,\n  est_payout: info.EstPayout ?? 0,\n  klicks: info.Clicks ?? 0,\n  sessions: info.sessions ?? 0,\n  gestern_umsatz: cmp.Sales ?? null,\n  gestern_bestellungen: cmp.Orders ?? null,\n  gestern_nettogewinn: cmp.NetProfit ?? null,\n  delta_umsatz_pct: cmp.Sales_delta ?? null,\n  delta_bestellungen_pct: cmp.Orders_delta ?? null,\n  gebuehr_fba: fees.FBAPerUnitFulfillmentFee ?? 0,\n  gebuehr_storage: fees.FBAStorageFee ?? 0\n};\n\n// ===== \"Push\"-Ersatz: Delta gegen den letzten Lauf =====\nconst store = $getWorkflowStaticData('global');\nconst vorher = store.letzteKpi || {};\nconst gleicherTag = vorher.tagUtc === kpi.tagUtc;\nconst neueBestellungen = gleicherTag ? kpi.bestellungen - (vorher.bestellungen ?? 0) : kpi.bestellungen;\nconst neuerUmsatz = gleicherTag ? kpi.umsatz - (vorher.umsatz ?? 0) : kpi.umsatz;\nstore.letzteKpi = kpi;\n\n// ===== Alarmregeln (anpassen) =====\nconst regeln = [];\nif (kpi.real_acos_pct !== null && kpi.werbekosten < -20 && kpi.real_acos_pct > 35) regeln.push(`ACoS ${kpi.real_acos_pct.toFixed(1)} % bei ${Math.abs(kpi.werbekosten).toFixed(2)} EUR Spend`);\nif (kpi.umsatz > 150 && kpi.nettogewinn < 0) regeln.push(`Netto ${kpi.nettogewinn.toFixed(2)} EUR bei ${kpi.umsatz.toFixed(2)} EUR Umsatz`);\nif (kpi.erstattungen >= 3) regeln.push(`${kpi.erstattungen} Erstattungen heute`);\nconst h = new Date().getUTCHours();\nif (h >= 14 && kpi.delta_umsatz_pct !== null && kpi.delta_umsatz_pct < -60) regeln.push(`Umsatz ${kpi.delta_umsatz_pct.toFixed(0)} % vs. gestern (Stand ${h}:00 UTC)`);\n\nconst message = [\n  `*Sellerboard ${kpi.tagUtc}* (Stand ${new Date().toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })})`,\n  `Umsatz *${kpi.umsatz.toFixed(2)} EUR* · ${kpi.bestellungen} Bestellungen · ${kpi.einheiten} Einheiten`,\n  `Netto *${kpi.nettogewinn.toFixed(2)} EUR* · Marge ${kpi.marge_pct === null ? '–' : kpi.marge_pct.toFixed(1) + ' %'} · ACoS ${kpi.real_acos_pct === null ? '–' : kpi.real_acos_pct.toFixed(1) + ' %'} · TACoS ${kpi.tacos_pct === null ? '–' : kpi.tacos_pct + ' %'}`,\n  `Letzte Stunde: +${neueBestellungen} Bestellungen / +${neuerUmsatz.toFixed(2)} EUR`,\n  `Gestern gesamt: ${kpi.gestern_umsatz ?? '–'} EUR / ${kpi.gestern_bestellungen ?? '–'} Bestellungen / Netto ${kpi.gestern_nettogewinn ?? '–'} EUR`,\n  regeln.length ? `:rotating_light: *Alarm:* ${regeln.join(' | ')}` : ''\n].filter(Boolean).join('\\n');\n\nreturn [{ json: { ...kpi, neue_bestellungen_1h: neueBestellungen, neuer_umsatz_1h: neuerUmsatz, alarm: regeln.length > 0, alarm_grund: regeln.join(' | '), message } }];"
+      },
+      "id": "map",
+      "name": "KPIs + Delta + Alarmregeln",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "DEINE_GOOGLE_SHEET_ID" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Stundenlog" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [], "schema": [] },
+        "options": {}
+      },
+      "id": "sheet",
+      "name": "Stundenlog → Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [180, -160],
+      "notes": "Optional: Sheet-ID eintragen, Tab 'Stundenlog' anlegen (Spalten werden automatisch gemappt)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.alarm }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      },
+      "id": "ifAlarm",
+      "name": "Alarm?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [180, 100]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "mode": "name", "value": "#amazon-alerts" },
+        "text": "={{ $json.message }}",
+        "otherOptions": { "mrkdwn": true }
+      },
+      "id": "slack",
+      "name": "Slack: Alarm",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {},
+      "id": "idle",
+      "name": "Alles im Rahmen",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [400, 200]
+    }
+  ],
+  "connections": {
+    "Jede Stunde": { "main": [[{ "node": "Aufruf bauen (UTC-Tag)", "type": "main", "index": 0 }]] },
+    "Aufruf bauen (UTC-Tag)": { "main": [[{ "node": "SB · MCP Call", "type": "main", "index": 0 }]] },
+    "SB · MCP Call": { "main": [[{ "node": "KPIs + Delta + Alarmregeln", "type": "main", "index": 0 }]] },
+    "KPIs + Delta + Alarmregeln": {
+      "main": [[
+        { "node": "Stundenlog → Google Sheet", "type": "main", "index": 0 },
+        { "node": "Alarm?", "type": "main", "index": 0 }
+      ]]
+    },
+    "Alarm?": {
+      "main": [
+        [{ "node": "Slack: Alarm", "type": "main", "index": 0 }],
+        [{ "node": "Alles im Rahmen", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Europe/Berlin" },
+  "pinData": {}
+}

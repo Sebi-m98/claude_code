@@ -1,0 +1,103 @@
+{
+  "name": "SB · Restock-Alarm (täglich 07:30)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "30 7 * * *" }] }
+      },
+      "id": "trigger",
+      "name": "Täglich 07:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-700, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ACCOUNT_ID = 'a706de72-ef6f-11ed-ae54-78ac440eef32';\nconst PAGES = 3; // 3 x 35 = bis zu 105 Produkte; bei mehr hochsetzen\n\n// inventory ist synchron (kein warm-up), max 35 Zeilen/Seite -> ein Item pro Seite\nreturn Array.from({ length: PAGES }, (_, i) => ({ json: {\n  tool: 'inventory',\n  arguments: {\n    account_id: ACCOUNT_ID,\n    page: i + 1,\n    count: 35,\n    show_out_of_stock: true,\n    sort: 'RunningOutOfStock',\n    sort_direction: 'desc'\n  }\n}}));"
+      },
+      "id": "build",
+      "name": "Seiten-Aufrufe bauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 0]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "list", "value": "", "cachedResultName": "SB · MCP Call (Sub-Workflow)" },
+        "mode": "each"
+      },
+      "id": "mcp",
+      "name": "SB · MCP Call (je Seite)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [-260, 0],
+      "notes": "Hier den Sub-Workflow '00' auswaehlen. Mode 'each' = ein Call pro Seite, nacheinander (Rate Limit!)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json);\nconst fehler = items.filter(i => !i.ok).map(i => i.error);\nif (fehler.length === items.length) throw new Error('Alle inventory-Calls fehlgeschlagen: ' + fehler.join(' | '));\n\nconst okItems = items.filter(i => i.ok);\nconst details = okItems[0]?.payload?.details || {};\nconst total = okItems[0]?.payload?.total ?? 0;\nconst rows = okItems.flatMap(i => i.payload?.result || []);\n\n// Reorder-Kandidaten: Flags kommen als Strings (\"NO\"/\"YES\"), nicht als Boolean.\n// DaysOfStockLeft = 0 heisst bei SalesVelocity = 0 nur \"keine Velocity\", NICHT out of stock -> deshalb Flags nutzen.\nconst kandidaten = rows\n  .filter(r => r.TimeToReorder !== 'NO' || r.RunningOutOfStock !== 'NO' || (r.QtyToReorder || 0) > 0)\n  .map(r => ({\n    asin: r.ASIN,\n    sku: r.SKU,\n    name: String(r.Name || '').slice(0, 60),\n    kanal: r.Channel,\n    fba_bestand: r.FBAStock,\n    unterwegs: r.SentToFBA,\n    bestellt: r.Ordered,\n    velocity_pro_tag: r.SalesVelocity,\n    tage_reichweite: r.DaysOfStockLeft,\n    tage_bis_reorder: r.DaysToReorder,\n    menge_reorder: r.QtyToReorder,\n    ek_stueck: r.Cost,\n    investition: Math.round((r.QtyToReorder || 0) * (r.Cost || 0) * 100) / 100,\n    laeuft_leer: r.RunningOutOfStock,\n    reorder_faellig: r.TimeToReorder,\n    lost_sales: r.LostSales,\n    link: r.LinkToAmazon,\n    product_id: r.ProductID\n  }))\n  .sort((a, b) => (a.tage_bis_reorder ?? 999) - (b.tage_bis_reorder ?? 999));\n\nconst ar = details.actionRequired || {};\nconst fmt = n => (n ?? 0).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });\n\nconst zeilen = kandidaten.slice(0, 15).map(k =>\n  `• <${k.link}|${k.asin}> ${k.name} — FBA ${k.fba_bestand} (+${k.unterwegs} unterwegs, +${k.bestellt} bestellt), ${k.velocity_pro_tag}/Tag, Reorder in ${k.tage_bis_reorder === 999 ? '–' : k.tage_bis_reorder + ' Tagen'}, Menge ${k.menge_reorder} ≈ ${fmt(k.investition)} EUR`\n);\n\nconst message = [\n  `*Sellerboard Restock-Check* · ${total} Produkte · Lagerwert ${fmt(details.total?.costOfGoods)} EUR (EK)`,\n  `Handlungsbedarf: *${ar.productsCount ?? 0} Produkte* · Investition ${fmt(ar.investmentNeeded)} EUR · Umsatz in Gefahr ${fmt(ar.salesAtRisk)} EUR · Gewinn in Gefahr ${fmt(ar.profitAtRisk)} EUR`,\n  ...zeilen,\n  kandidaten.length > 15 ? `… und ${kandidaten.length - 15} weitere` : '',\n  fehler.length ? `:warning: ${fehler.length} Seite(n) nicht geladen` : ''\n].filter(Boolean).join('\\n');\n\nreturn [{ json: { anzahl: kandidaten.length, action_required: ar, kandidaten, message } }];"
+      },
+      "id": "agg",
+      "name": "Reorder-Kandidaten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.anzahl }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      },
+      "id": "ifAny",
+      "name": "Handlungsbedarf?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "mode": "name", "value": "#amazon-alerts" },
+        "text": "={{ $json.message }}",
+        "otherOptions": { "mrkdwn": true }
+      },
+      "id": "slack",
+      "name": "Slack: Restock-Liste",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [400, -100]
+    },
+    {
+      "parameters": {},
+      "id": "idle",
+      "name": "Nichts nachzubestellen",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [400, 100]
+    }
+  ],
+  "connections": {
+    "Täglich 07:30": { "main": [[{ "node": "Seiten-Aufrufe bauen", "type": "main", "index": 0 }]] },
+    "Seiten-Aufrufe bauen": { "main": [[{ "node": "SB · MCP Call (je Seite)", "type": "main", "index": 0 }]] },
+    "SB · MCP Call (je Seite)": { "main": [[{ "node": "Reorder-Kandidaten", "type": "main", "index": 0 }]] },
+    "Reorder-Kandidaten": { "main": [[{ "node": "Handlungsbedarf?", "type": "main", "index": 0 }]] },
+    "Handlungsbedarf?": {
+      "main": [
+        [{ "node": "Slack: Restock-Liste", "type": "main", "index": 0 }],
+        [{ "node": "Nichts nachzubestellen", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Europe/Berlin" },
+  "pinData": {}
+}
