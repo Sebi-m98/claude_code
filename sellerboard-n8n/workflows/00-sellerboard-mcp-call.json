@@ -1,0 +1,182 @@
+{
+  "name": "SB · MCP Call (Sub-Workflow)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "Aufruf von anderem Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-900, 0],
+      "notes": "Erwartet pro Item: { tool: 'dashboard_period', arguments: {...}, maxAttempts?: 6, waitSeconds?: 8 }"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== EINZIGE STELLE MIT KONFIG =====\nconst MCP_URL = 'https://DEINE-MCP-URL/mcp'; // claude.ai -> Settings -> Connectors -> SellerBoard\n\nconst inp = $input.first().json;\nif (!inp.tool) throw new Error('Feld \"tool\" fehlt im Aufruf');\n\nreturn [{ json: {\n  mcpUrl: MCP_URL,\n  tool: inp.tool,\n  arguments: inp.arguments || {},\n  maxAttempts: inp.maxAttempts || 6,\n  waitSeconds: inp.waitSeconds || 8\n}}];"
+      },
+      "id": "prep",
+      "name": "Vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-680, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.mcpUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json, text/event-stream" },
+            { "name": "MCP-Protocol-Version", "value": "2025-06-18" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"n8n-sellerboard\",\"version\":\"1.0\"}}}",
+        "options": {
+          "response": { "response": { "fullResponse": true, "responseFormat": "text", "neverError": true } }
+        }
+      },
+      "id": "init",
+      "name": "MCP initialize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-460, 0],
+      "notes": "Credential: OAuth2 API (Sellerboard MCP) - siehe README"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Session-Id merken (stateful Server); bleibt leer bei stateless Servern.\nconst cfg = $('Vorbereiten').first().json;\nconst r = $input.first().json;\nconst headers = r.headers || {};\nif ((r.statusCode || 0) >= 400) {\n  throw new Error(`MCP initialize fehlgeschlagen: HTTP ${r.statusCode} - ${String(r.body).slice(0, 300)}`);\n}\nreturn [{ json: { ...cfg, sessionId: headers['mcp-session-id'] || '' } }];"
+      },
+      "id": "session",
+      "name": "Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.mcpUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json, text/event-stream" },
+            { "name": "MCP-Protocol-Version", "value": "2025-06-18" },
+            { "name": "Mcp-Session-Id", "value": "={{ $json.sessionId }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "options": {
+          "response": { "response": { "fullResponse": true, "responseFormat": "text", "neverError": true } }
+        }
+      },
+      "id": "initialized",
+      "name": "notifications/initialized",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-20, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Session').first().json.mcpUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json, text/event-stream" },
+            { "name": "MCP-Protocol-Version", "value": "2025-06-18" },
+            { "name": "Mcp-Session-Id", "value": "={{ $('Session').first().json.sessionId }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: $('Session').first().json.tool, arguments: $('Session').first().json.arguments } }) }}",
+        "options": {
+          "response": { "response": { "fullResponse": true, "responseFormat": "text", "neverError": true } }
+        }
+      },
+      "id": "call",
+      "name": "tools/call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MCP-Antwort auspacken. Body ist entweder JSON oder SSE (\"data: {...}\"-Zeilen).\nconst cfg = $('Session').first().json;\nconst r = $input.first().json;\nconst attempt = $runIndex + 1;\n\nlet body = String(r.body ?? '').trim();\nlet rpc = {};\nif (body.startsWith('{')) {\n  rpc = JSON.parse(body);\n} else {\n  const lines = body.split('\\n').filter(l => l.startsWith('data:'));\n  for (const l of lines) {\n    try {\n      const j = JSON.parse(l.slice(5).trim());\n      if (j.result || j.error) rpc = j;\n    } catch (e) {}\n  }\n}\n\nconst httpError = (r.statusCode || 0) >= 400 ? `HTTP ${r.statusCode}` : null;\nconst rpcError = rpc.error ? (rpc.error.message || JSON.stringify(rpc.error)) : null;\n\n// Tool-Ergebnis: Text-Content = kurze Zusammenfassung + JSON-Block\nlet payload = rpc?.result?.structuredContent ?? null;\nif (!payload) {\n  const text = (rpc?.result?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\\n');\n  const i = text.indexOf('{');\n  if (i >= 0) { try { payload = JSON.parse(text.slice(i)); } catch (e) { payload = { raw: text }; } }\n  else payload = { raw: text };\n}\nconst toolError = rpc?.result?.isError ? String(payload?.raw ?? JSON.stringify(payload)).slice(0, 500) : null;\n\nconst preparing = payload?.status === 'preparing';\nconst retry = preparing && attempt < cfg.maxAttempts;\n\nreturn [{ json: {\n  tool: cfg.tool,\n  arguments: cfg.arguments,\n  attempt,\n  preparing,\n  retry,\n  waitSeconds: cfg.waitSeconds,\n  ok: !httpError && !rpcError && !toolError && !preparing,\n  error: httpError || rpcError || toolError || (preparing ? 'preparing (Timeout nach ' + attempt + ' Versuchen)' : null),\n  payload\n}}];"
+      },
+      "id": "parse",
+      "name": "Antwort parsen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.retry }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ]
+        }
+      },
+      "id": "ifRetry",
+      "name": "Noch preparing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 0]
+    },
+    {
+      "parameters": { "amount": "={{ $json.waitSeconds }}", "unit": "seconds" },
+      "id": "wait",
+      "name": "Warten",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [860, -160],
+      "webhookId": "sb-mcp-call-wait"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ergebnis an den aufrufenden Workflow zurueckgeben\nconst r = $input.first().json;\nreturn [{ json: { ok: r.ok, tool: r.tool, arguments: r.arguments, attempts: r.attempt, error: r.error, payload: r.payload } }];"
+      },
+      "id": "out",
+      "name": "Ergebnis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 160]
+    }
+  ],
+  "connections": {
+    "Aufruf von anderem Workflow": { "main": [[{ "node": "Vorbereiten", "type": "main", "index": 0 }]] },
+    "Vorbereiten": { "main": [[{ "node": "MCP initialize", "type": "main", "index": 0 }]] },
+    "MCP initialize": { "main": [[{ "node": "Session", "type": "main", "index": 0 }]] },
+    "Session": { "main": [[{ "node": "notifications/initialized", "type": "main", "index": 0 }]] },
+    "notifications/initialized": { "main": [[{ "node": "tools/call", "type": "main", "index": 0 }]] },
+    "tools/call": { "main": [[{ "node": "Antwort parsen", "type": "main", "index": 0 }]] },
+    "Antwort parsen": { "main": [[{ "node": "Noch preparing?", "type": "main", "index": 0 }]] },
+    "Noch preparing?": {
+      "main": [
+        [{ "node": "Warten", "type": "main", "index": 0 }],
+        [{ "node": "Ergebnis", "type": "main", "index": 0 }]
+      ]
+    },
+    "Warten": { "main": [[{ "node": "tools/call", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
