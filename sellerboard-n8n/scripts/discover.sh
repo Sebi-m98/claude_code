@@ -26,6 +26,7 @@ STATUS="$(curl -sS -o "$BODY" -D "$HDRS" -w '%{http_code}' -X POST "$MCP_URL" \
   -H 'MCP-Protocol-Version: 2025-06-18' \
   --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"discover","version":"1.0"}}}' || echo "000")"
 echo "   HTTP $STATUS"
+[[ "$STATUS" == "000" || "$STATUS" == "000000" ]] && { echo "   -> Keine Verbindung (DNS/Proxy/Firewall). Das sagt nichts über den Server aus - von einem Rechner mit freiem Internet erneut laufen lassen."; rm -f "$HDRS" "$BODY"; exit 5; }
 WWW="$(grep -i '^www-authenticate:' "$HDRS" | tr -d '\r' || true)"
 [[ -n "$WWW" ]] && echo "   $WWW"
 [[ "$STATUS" == "200" ]] && { echo "   -> Server antwortet OHNE Auth. n8n braucht dann gar keine Credential."; head -c 400 "$BODY"; echo; exit 0; }

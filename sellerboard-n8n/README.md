@@ -21,26 +21,37 @@ Dieses Paket macht daraus drei importierbare Workflows.
 | `scripts/discover.sh` | Zeigt, wie der Server abgesichert ist (OAuth-Metadata, DCR, PKCE). |
 | `scripts/register-client.sh` | Registriert n8n als OAuth-Client und druckt die Credential-Werte. |
 
-## Auth: warum die Login-Seite genau das Richtige ist
+## Auth: woher n8n die Sellerboard-Zugangsdaten hat
 
-Der Connector wurde in claude.ai nur per URL angebunden, dann kam eine Login-Seite. Das ist
-**OAuth 2.1 mit Dynamic Client Registration** — claude.ai hat sich selbst als Client registriert
-und dich auf die Login-Seite des Servers geschickt. n8n kann exakt dasselbe. Es gibt keine
-Client-ID zum Abschreiben, weil jeder Client seine eigene bekommt.
+Kurz: **gar nicht.** n8n sieht nie dein Sellerboard-Passwort. Der Server (`mcp.sellerboard.com`) ist
+Sellerboards offizieller MCP-Server und spricht OAuth 2.1 mit Dynamic Client Registration — dasselbe,
+was beim claude.ai-Connector passiert ist (URL eintragen → Login-Seite → verbunden):
+
+1. n8n registriert sich einmalig selbst als „Client" beim Server (`register-client.sh` oder die
+   n8n-Credential *MCP OAuth2 API* mit DCR). Dafür gibt es keine Client-ID zum Abschreiben — jeder Client bekommt seine eigene.
+2. Beim Klick auf „Connect my account" schickt n8n dich auf **Sellerboards** Login-Seite. Du loggst dich dort ein,
+   Sellerboard fragt „n8n darf auf deine Daten zugreifen?", du bestätigst.
+3. Sellerboard schickt n8n einen **Access-Token** (kurzlebig) plus **Refresh-Token** (langlebig). Beides liegt verschlüsselt
+   im n8n-Credential-Store. n8n erneuert den Access-Token automatisch — du loggst dich nie wieder ein.
+4. Jeder HTTP-Request-Node mit dieser Credential sendet `Authorization: Bearer <token>`. Der Server weiß damit, *wer* fragt,
+   und `list_accounts` liefert genau die Sellerboard-Accounts, auf die dieser Login Zugriff hat.
+
+Widerrufen geht jederzeit: Token in Sellerboard (verbundene Apps) oder Credential in n8n löschen.
 
 ## Setup (≈ 20 Minuten)
 
-**1. Server prüfen** (MCP-URL steht in claude.ai → Settings → Connectors → SellerBoard):
+**1. Server prüfen** — auf deinem Rechner (Mac: Terminal, curl und python3 sind vorhanden). Die URL exakt so wie
+im claude.ai-Connector eingetragen (mit oder ohne `/mcp` am Ende — das Script sagt dir, ob sie stimmt):
 
 ```bash
 chmod +x scripts/*.sh
-./scripts/discover.sh https://host/mcp
+./scripts/discover.sh https://mcp.sellerboard.com
 ```
 
 **2. n8n als Client registrieren und Credential anlegen:**
 
 ```bash
-./scripts/register-client.sh https://host/mcp https://dein-n8n.example.com
+./scripts/register-client.sh https://mcp.sellerboard.com https://n8n.marxen-ecommerce.com
 ```
 
 Das Script druckt die Felder für eine n8n-Credential vom Typ **OAuth2 API** (Grant Type PKCE).
@@ -60,6 +71,33 @@ Access- und Refresh-Token selbst aktuell.
 
 **4. Testen:** `00` manuell mit Pin-Data `{ "tool": "list_accounts", "arguments": {} }` ausführen.
 Kommt `ok: true` mit deinem Account zurück, läuft alles.
+
+## Für Kunden bauen (deren Sellerboard, dein n8n)
+
+Der Token gehört zu einem **Login**, nicht zu einem Account. `list_accounts` liefert alle Accounts, die dieser Login sehen darf.
+Daraus folgen zwei saubere Modelle — empfohlen ist Modell A:
+
+**Modell A — Kunde gibt deinem Sellerboard-User Zugriff (Standard für Agenturen/Freelancer).**
+Der Kunde legt in Sellerboard unter *Einstellungen → Benutzer* deine E-Mail als Benutzer an (Lesezugriff reicht für alle
+Reporting-Workflows). Danach:
+- deine bestehende n8n-Credential bleibt, nichts neu verbinden;
+- `list_accounts` zeigt jetzt zusätzlich den Kunden-Account mit eigener `account_id`;
+- pro Kunde `01`/`02` duplizieren, nur `ACCOUNT_ID` und den Slack-Channel ändern. Bei mehreren Kunden: `ACCOUNT_ID`
+  aus einem Google-Sheet „Kunden" (Spalten: Name, account_id, Slack-Channel) lesen und über die Zeilen loopen.
+Vorteile: Kunde behält die Kontrolle (kann Rechte einschränken oder dich entfernen), du hast eine Credential, ein Login,
+saubere Trennung pro `account_id`. Zusatzabsicherung: `account_id` fest im Workflow, nie aus Eingaben — dann kann kein
+Workflow versehentlich einen fremden Account lesen.
+
+**Modell B — eigene n8n-Credential pro Kunde.**
+Du legst in n8n eine zweite Credential „Sellerboard MCP – Kunde X" an, klickst „Connect", und **der Kunde** loggt sich auf
+der Sellerboard-Seite ein (im Call per Bildschirmfreigabe oder du schickst ihm den Authorize-Link, der auf dein n8n
+zurückleitet). Der Token gehört dann seinem Login. Sinnvoll, wenn der Kunde keinen Benutzer anlegen will oder darf.
+Nachteil: läuft der Refresh-Token ab oder ändert der Kunde sein Passwort, musst du ihn erneut einloggen lassen.
+
+Nicht machen: Kunden-Passwörter sammeln oder einen „Sammel-Login" bauen. OAuth existiert genau, damit das nicht nötig ist.
+
+**Wichtig für die Kundenabrechnung:** die Rate-Limits gelten *pro Account* (5 Burst, ~3/s). Zehn Kunden stündlich
+abzufragen ist also kein Problem, solange die Workflows nacheinander laufen (Schedule-Trigger versetzt, z. B. Minute 0, 5, 10 …).
 
 ## Weitere Tools anbinden
 
